@@ -55,7 +55,26 @@ main{padding:4px 16px calc(var(--safe-b) + 90px);max-width:640px;margin:0 auto}
 .poster{width:56px;height:80px;border-radius:10px;object-fit:cover;background:var(--surface2);flex:none;
   display:grid;place-items:center;font-weight:800;font-size:22px;color:var(--muted)}
 .card .body{flex:1;min-width:0}
-.card .name{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .name{font-weight:700;font-size:16px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.card>.btn{padding:8px 10px;font-size:13px;flex:none}
+/* színes helyettesítő borító, ha nincs kép */
+.ph{color:#fff!important;font-size:18px!important;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+/* állapotcímkék */
+.tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:1px;text-transform:uppercase}
+.t-new{background:var(--accent);color:#fff}.t-soon{background:var(--accent2);color:#fff}.t-ok{background:color-mix(in srgb,var(--ok) 22%,transparent);color:var(--ok)}
+.t-gray{background:var(--chip);color:var(--muted)}
+/* haladássáv */
+.prog{height:5px;border-radius:3px;background:var(--surface2);margin-top:7px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.prog-l{font-size:11px;color:var(--muted);margin-top:3px}
+/* "Ma jön" sáv */
+.strip{display:flex;gap:10px;overflow-x:auto;margin:0 -16px 12px;padding:2px 16px 4px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.strip::-webkit-scrollbar{display:none}
+.strip-it{flex:none;width:112px;scroll-snap-align:start}
+.strip-it .poster{width:112px;height:160px;border-radius:12px;font-size:26px}
+.strip-it .when{font-size:12px;font-weight:800;color:var(--accent);margin-top:6px;text-transform:uppercase}
+.strip-it .nm{font-size:13px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.strip-it .lb{font-size:12px;color:var(--muted)}
 .card .sub{color:var(--muted);font-size:14px;margin-top:2px}
 .card .sub.hl{color:var(--accent);font-weight:600}
 .card .sub.ok{color:var(--ok)}
@@ -148,6 +167,37 @@ textarea{min-height:70px;resize:vertical}
 .prov img{width:26px;height:26px;border-radius:6px}
 .ask{display:flex;gap:12px;align-items:flex-start;box-shadow:inset 0 0 0 2px var(--accent2)}
 .ask .poster{width:46px;height:66px;font-size:18px}
+details.more{margin-top:4px}
+details.more>summary{list-style:none;cursor:pointer;background:var(--surface);border-radius:14px;padding:13px 12px;font-weight:700;margin-bottom:10px;display:flex;align-items:center}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::after{content:'›';margin-left:auto;font-size:22px;line-height:1;color:var(--muted);transition:transform .2s}
+details.more[open]>summary::after{transform:rotate(90deg)}
+.dgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 12px}
+@media (min-width:520px){.dgrid{grid-template-columns:repeat(3,1fr)}}
+.dtile{min-width:0;cursor:pointer}
+.dimg{position:relative}
+.dimg .poster{width:100%;height:auto;aspect-ratio:2/3;border-radius:12px;font-size:30px!important}
+.dbadge{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;font-weight:800;padding:3px 7px;border-radius:7px;text-transform:uppercase}
+.dhave{position:absolute;right:6px;top:6px;background:var(--ok);color:#fff;font-size:12px;font-weight:800;width:24px;height:24px;border-radius:50%;display:grid;place-items:center}
+.dhave.me{background:rgba(0,0,0,.72)}
+.dname{font-weight:700;font-size:14px;line-height:1.25;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dsub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-card{cursor:pointer}
+.stat-row.big b{font-size:34px}
+.bars{display:flex;align-items:flex-end;gap:4px;height:150px;padding-top:4px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.bar i{display:block;width:100%;max-width:22px;min-height:2px;background:var(--accent);border-radius:4px 4px 0 0}
+.bar .bv{font-size:10px;font-weight:700;margin-bottom:2px;color:var(--text)}
+.bar .bl{font-size:9px;color:var(--muted);margin-top:4px;border-top:1px solid var(--line);width:100%;text-align:center;padding-top:3px}
+details.grp .field:first-child{margin-top:0}
+[data-swipe-l],[data-swipe-r]{touch-action:pan-y;position:relative}
+main{overflow-x:clip}
+.sw-l::after,.sw-r::after{position:absolute;top:50%;transform:translateY(-50%);font-weight:800;font-size:15px;white-space:nowrap;color:var(--muted)}
+.sw-l::after{content:attr(data-sl);left:100%;margin-left:16px}
+.sw-r::after{content:attr(data-sr);right:100%;margin-right:16px}
+.sw-go::after{color:var(--accent)}
+.sw-go.sw-r::after{color:var(--ok)}
+#dSeg button{font-size:13px;padding:8px 2px}
 .cover-btn{position:relative;flex:none}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
   display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
@@ -177,7 +227,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '18';
+const APP_VER = '19';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -238,9 +288,11 @@ function toast(msg){
   clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2400);
 }
 function posterHtml(sh, cls){
-  return sh.image
-    ? `<img class="${cls||'poster'}" src="${esc(sh.image)}" alt="" loading="lazy">`
-    : `<div class="${cls||'poster'}">${esc((sh.name||'?').trim()[0]||'?').toUpperCase()}</div>`;
+  if (sh.image) return `<img class="${cls||'poster'}" src="${esc(sh.image)}" alt="" loading="lazy">`;
+  // nincs kép: a címből számolt színátmenet + kezdőbetűk
+  const n = String(sh.name || '?'); let h = 0; for (const c of n) h = (h * 31 + c.charCodeAt(0)) % 360;
+  const ini = n.replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+  return `<div class="${cls||'poster'} ph" style="background:linear-gradient(135deg,hsl(${h} 55% 42%),hsl(${(h + 50) % 360} 60% 30%))">${esc(ini)}</div>`;
 }
 
 /* ---------- epizód logika ---------- */
@@ -313,6 +365,7 @@ function setProgress(sh, s, n){
   state.stats = state.stats || {}; if (!state.statsSince) state.statsSince = now();
   const st = state.stats[y] = state.stats[y] || {eps: 0, shows: {}};
   st.eps = Math.max(0, st.eps + k); st.shows[sh.id] = Math.max(0, (st.shows[sh.id] || 0) + k);
+  const mo = new Date().getMonth(); st.months = st.months || {}; st.months[mo] = Math.max(0, (st.months[mo] || 0) + k);
 }
 function recentPremiere(sh){
   // új évad első része, ami az elmúlt 21 napban jött ki és még nem láttad
@@ -706,7 +759,8 @@ function renderYoutube(){
   const chName = Object.fromEntries(yt.channels.map(c => [c.id, c.title]));
   const list = ytVisible().filter(v => !ytChan || v.ch === ytChan);
   const fresh = list.filter(v => !yt.seen[v.id]), old = list.filter(v => yt.seen[v.id] && !yt.later[v.id]).slice(0, 80);
-  const row = v => `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${esc(v.id)}">
+  const row = v => `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${esc(v.id)}" ${yt.nope[v.id] ? '' :
+    yt.later[v.id] ? 'data-swipe-l="ytLater" data-sl="Levesz"' : !yt.seen[v.id] ? 'data-swipe-l="ytNope" data-sl="Nem érdekel" data-swipe-r="ytWant" data-sr="Érdekel"' : 'data-swipe-l="ytNope" data-sl="Elrejt"'}>
       ${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
       <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${(yt.durs || {})[v.id] ? ' · ' + secTxt(yt.durs[v.id]) : ''}${yt.later[v.id] && yt.seen[v.id] && v.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div></div>
       ${yt.nope[v.id] ? `<button class="btn" data-act="ytNope" data-vid="${esc(v.id)}">Visszahoz</button>` :
@@ -858,7 +912,23 @@ function renderNezem(){
     return [2, 0];
   };
   list.sort((a, b) => { const ka = key(a), kb = key(b); return ka[0] - kb[0] || ka[1] - kb[1] || a.name.localeCompare(b.name, 'hu'); });
-  return promptsHtml() + backupBanner() + bannerHtml() + list.map(cardNezem).join('');
+  return promptsHtml() + backupBanner() + todayStrip() + bannerHtml() + list.map(cardNezem).join('');
+}
+// az aktuális évad haladása (az évad, amelyikben a következő megnézendő rész van)
+function seasonProgress(sh){
+  const all = eps(sh); if (!all.length) return null;
+  const nu = nextUnwatched(sh), s = nu ? nu.s : sh.lastSeason; if (!s) return null;
+  const inS = all.filter(e => e.s === s); if (inS.length < 2) return null;
+  return {s, total: inS.length, done: inS.filter(e => !after(e, sh.lastSeason, sh.lastEpisode)).length};
+}
+// "Ma jön" sáv: ami ma/holnap jön a listáidból
+function todayStrip(){
+  const its = upcomingItems().items.filter(it => dayDiff(it.d) <= 1);
+  if (!its.length) return '';
+  return `<div class="section-title" style="margin-top:4px">Ma és holnap</div><div class="strip">${its.map(it => {
+    const d = new Date(it.d), t = it.key.endsWith('m') ? '' : ' ' + new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(d);
+    return `<div class="strip-it" data-act="open" data-id="${it.sh.id}">${posterHtml(it.sh)}<div class="when">${rel(it.d)}${t}</div>
+      <div class="nm">${esc(it.sh.name)}</div><div class="lb">${esc(it.label)}</div></div>`; }).join('')}</div>`;
 }
 function cardNezem(sh){
   const ua = unwatchedAired(sh);
@@ -866,11 +936,13 @@ function cardNezem(sh){
   const nx = nextInfo(sh);
   let l1 = sh.lastSeason ? `${code(sh.lastSeason, sh.lastEpisode)}-nél tartasz` : 'Még nem kezdted el';
   let l2, cls = '';
-  if (ua.length) { l2 = ua.length === 1 ? '1 új rész vár' : `${ua.length} rész vár`; cls = 'hl'; }
-  else if (nx) { l2 = `Naprakész · következő: ${rel(nx.d)} (${esc(nx.label)})`; cls = 'ok'; }
-  else if (isEnded(sh)) l2 = 'Naprakész · a sorozat véget ért';
-  else l2 = 'Naprakész · nincs még dátum';
-  if (!sh.tvmazeId && !nx) l2 = 'Kézi sorozat';
+  if (ua.length) l2 = `<span class="tag t-new">${ua.length === 1 ? '1 új rész' : ua.length + ' új rész'}</span>`;
+  else if (nx && dayDiff(nx.d) <= 1) l2 = `<span class="tag t-soon">${rel(nx.d)}</span>${esc(nx.label)}`;
+  else if (nx) l2 = `<span class="tag t-ok">Naprakész</span>köv.: ${rel(nx.d)} · ${esc(nx.label)}`;
+  else if (isEnded(sh)) l2 = '<span class="tag t-gray">Véget ért</span>';
+  else l2 = '<span class="tag t-ok">Naprakész</span>nincs még dátum';
+  if (!sh.tvmazeId && !nx) l2 = '<span class="tag t-gray">Kézi</span>';
+  const pr = seasonProgress(sh);
   let badge = '';
   if (recentPremiere(sh)) badge = '<span class="badge">ÚJ ÉVAD</span>';
   else if (nx && nx.premiere && dayDiff(nx.d) <= 14) badge = `<span class="badge soon">${rel(nx.d).toUpperCase()}</span>`;
@@ -878,9 +950,11 @@ function cardNezem(sh){
   if (sh.tvmazeId) { if (nu && nu.d && nu.d <= availUntil(sh)) btn = `<button class="btn primary" data-act="plus" data-id="${sh.id}">✓ ${code(nu.s, nu.n)}</button>`; }
   else btn = `<button class="btn primary" data-act="plus" data-id="${sh.id}">+1 rész</button>`;
   if (sh.tvmazeId && !ua.length && !nx && sh.lastSeason) btn = `<button class="btn" data-act="finish" data-id="${sh.id}">Befejeztem</button>`;
-  return `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}
+  const sw = btn.includes('data-act="plus"') ? `data-swipe-l="plus" data-sl="+1 rész"` : '';
+  return `<div class="card" data-act="open" data-id="${sh.id}" ${sw}>${posterHtml(sh)}
     <div class="body"><div class="name">${esc(sh.name)}${badge}</div>
-    <div class="sub">${l1}</div><div class="sub ${cls}">${l2}</div></div>${btn}</div>`;
+    <div class="sub">${l1}</div><div class="sub ${cls}" style="margin-top:4px">${l2}</div>
+    ${pr ? `<div class="prog"><i style="width:${Math.round(pr.done / pr.total * 100)}%"></i></div><div class="prog-l">${pr.s}. évad: ${pr.done}/${pr.total} rész</div>` : ''}</div>${btn}</div>`;
 }
 
 function renderTervezem(){
@@ -902,7 +976,7 @@ function renderTervezem(){
     else sub = 'Még nincs bemutatva';
     const net = provShort(sh) ? ` · 📺 ${esc(provShort(sh))}` : (sh.meta && sh.meta.network ? ` · ${esc(sh.meta.network)}` : '');
     const badge = recentPremiere(sh) ? '<span class="badge">ÚJ ÉVAD</span>' : '';
-    return `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}
+    return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="start" data-sl="Elkezdem">${posterHtml(sh)}
       <div class="body"><div class="name">${esc(sh.name)}${badge}</div><div class="sub">${sub}${net}</div>
       ${sh.notes && sh.tvmazeId ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
       <button class="btn" data-act="start" data-id="${sh.id}">Elkezdem</button></div>`;
@@ -915,7 +989,7 @@ function cardFilm(sh){
   else if (fd && fd.d > now()) sub = `Várható: ${esc(fmtFilmDate(fd))}`;
   else sub = esc([filmYear(sh), sh.meta && sh.meta.desc].filter(Boolean).join(' · ') || 'Film');
   if (provShort(sh)) sub += ` · 📺 ${esc(provShort(sh))}`;
-  return `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}
+  return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="seen" data-sl="Láttam">${posterHtml(sh)}
     <div class="body"><div class="name">${esc(sh.name)}<span class="badge gray">FILM</span></div><div class="sub">${sub}</div>
     ${sh.notes ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
     <button class="btn" data-act="seen" data-id="${sh.id}">Láttam</button></div>`;
@@ -992,68 +1066,80 @@ function renderSajat(){
   return html;
 }
 
-function statsHtml(){
-  const y = new Date().getFullYear(), st = (state.stats || {})[y] || {eps: 0, shows: {}};
+function statsData(y){
+  const st = (state.stats || {})[y] || {eps: 0, shows: {}, months: {}};
   const films = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam' && sh.seenAt && new Date(sh.seenAt).getFullYear() === y);
-  const top = Object.entries(st.shows).map(([id, n]) => [byId(id), n]).filter(([sh, n]) => sh && n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const top = Object.entries(st.shows || {}).map(([id, n]) => [byId(id), n]).filter(([sh, n]) => sh && n > 0).sort((a, b) => b[1] - a[1]);
   const rated = state.shows.filter(sh => sh.rating);
-  const best = rated.slice().sort((a, b) => b.rating - a.rating || (b.seenAt || 0) - (a.seenAt || 0)).slice(0, 5);
+  const best = rated.slice().sort((a, b) => b.rating - a.rating || (b.seenAt || 0) - (a.seenAt || 0));
   const avg = rated.length ? (rated.reduce((a, sh) => a + sh.rating, 0) / rated.length).toFixed(1).replace('.', ',') : '';
-  return `<div class="section-title">${y} – statisztika</div>
-  <div class="field">
-    <div class="stat-row"><div><b>${st.eps}</b><span>megnézett rész</span></div><div><b>${top.length ? Object.values(st.shows).filter(n => n > 0).length : 0}</b><span>sorozat</span></div><div><b>${films.length}</b><span>film</span></div></div>
-    ${top.length ? `<div class="small muted" style="margin-top:10px">Legtöbbet nézett: ${top.map(([sh, n]) => `${esc(sh.name)} (${n})`).join(', ')}</div>` : ''}
-    ${best.length ? `<div class="small muted" style="margin-top:6px">Legjobbra értékelt: ${best.map(sh => `${esc(sh.name)} <span style="color:var(--warn)">${starsTxt(sh.rating)}</span>`).join(', ')}${avg ? ` · átlag: ${avg}` : ''}</div>` : ''}
-    <div class="small muted" style="margin-top:6px">A részeket ${state.statsSince ? fmtDate(state.statsSince, {year: 'numeric'}) + ' óta' : 'mostantól'} számolja.</div>
-  </div>`;
+  return {st, films, top, best, avg};
 }
+// kompakt kártya a Beállításokban; koppintásra nyílik az összefoglaló
+function statsHtml(){
+  const y = new Date().getFullYear(), {st, films, top} = statsData(y);
+  return `<div class="field stat-card" data-act="statsOpen">
+    <div style="display:flex;align-items:center;margin-bottom:8px"><b style="flex:1">📊 ${y} – összefoglaló</b><span class="muted" style="font-size:22px;line-height:1">›</span></div>
+    <div class="stat-row"><div><b>${st.eps}</b><span>megnézett rész</span></div><div><b>${top.length}</b><span>sorozat</span></div><div><b>${films.length}</b><span>film</span></div></div></div>`;
+}
+function renderStats(){
+  const y = new Date().getFullYear(), {st, films, top, best, avg} = statsData(y);
+  const months = st.months || {}, vals = Array.from({length: 12}, (_, i) => months[i] || 0), max = Math.max(1, ...vals);
+  const MN = ['jan','febr','márc','ápr','máj','jún','júl','aug','szept','okt','nov','dec'];
+  const bars = vals.map((v, i) => `<div class="bar" title="${MN[i]}: ${v} rész"><span class="bv">${v || ''}</span><i style="height:${Math.round(v / max * 110)}px"></i><span class="bl">${MN[i]}</span></div>`).join('');
+  const row = (sh, right) => `<div class="card" data-act="open" data-id="${sh.id}" style="padding:8px 10px">${posterHtml(sh)}<div class="body"><div class="name">${esc(sh.name)}</div></div><div class="small" style="flex:none">${right}</div></div>`;
+  $('#sheet').innerHTML = `<div class="sheet-head"><h2>${y} – összefoglaló</h2><button class="btn" data-act="close">Kész</button></div>
+    <div class="field"><div class="stat-row big"><div><b>${st.eps}</b><span>megnézett rész</span></div><div><b>${top.length}</b><span>sorozat</span></div><div><b>${films.length}</b><span>film</span></div></div>
+      ${avg ? `<div class="small muted" style="text-align:center;margin-top:8px">Átlagos értékelésed: <b style="color:var(--warn)">${avg} ★</b></div>` : ''}</div>
+    <div class="field"><label>Megnézett részek havonta</label><div class="bars">${bars}</div>
+      <div class="small muted" style="margin-top:6px">A részeket ${state.statsSince ? fmtDate(state.statsSince, {year: 'numeric'}) + ' óta' : 'mostantól'} számolja.</div></div>
+    ${top.length ? `<div class="section-title">Legtöbbet nézett sorozatok</div><div class="list-plain">${top.slice(0, 5).map(([sh, n]) => row(sh, `<b>${n}</b> rész`)).join('')}</div>` : ''}
+    ${best.length ? `<div class="section-title">Legjobbra értékelt</div><div class="list-plain">${best.slice(0, 5).map(sh => row(sh, `<span style="color:var(--warn)">${starsTxt(sh.rating)}</span>`)).join('')}</div>` : ''}
+    ${films.length ? `<div class="section-title">Idén látott filmek</div><div class="list-plain">${films.sort((a, b) => b.seenAt - a.seenAt).map(sh => row(sh, sh.rating ? `<span style="color:var(--warn)">${starsTxt(sh.rating)}</span>` : fmtDate(sh.seenAt))).join('')}</div>` : ''}`;
+}
+const grpOpen = {};
+const group = (title, body) => { const k = title.replace(/\s*\(\d+\)$/, ''); return `<details class="more grp" data-g="${esc(k)}" ${grpOpen[k] ? 'open' : ''}><summary>${title}</summary>${body}</details>`; };
 function renderBeall(){
   const archived = state.shows.filter(sh => sh.status === 'abbahagytam');
   const finished = state.shows.filter(sh => sh.status === 'befejeztem');
   const seenFilms = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam').sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0));
   const mini = sh => `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}<div class="body"><div class="name">${esc(sh.name)}${isFilm(sh) ? '<span class="badge gray">FILM</span>' : ''}</div>${sh.seenAt ? `<div class="sub small">Láttad: ${fmtDate(sh.seenAt)}${sh.rating ? ' · <span style="color:var(--warn)">' + starsTxt(sh.rating) + '</span>' : ''}</div>` : ''}</div></div>`;
+  const list = (arr, empty) => `<div class="list-plain">${arr.length ? arr.map(mini).join('') : `<div class="small muted" style="padding:0 4px 10px">${empty}</div>`}</div>`;
   const last = state.lastRefresh ? `${rel(state.lastRefresh)} ${new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(new Date(state.lastRefresh))}` : 'még soha';
+  const driveOn = lsGet('nezonaplo.driveOn') === '1' && driveOk();
   return statsHtml() + `
-  <div class="section-title">Adatok</div>
   <div class="field">
-    <div class="small muted">${state.shows.filter(s => !isFilm(s)).length} sorozat, ${state.shows.filter(isFilm).length} film · utolsó frissítés: ${last} · verzió: ${APP_VER}</div>
+    <div class="small muted">${state.shows.filter(s => !isFilm(s)).length} sorozat, ${state.shows.filter(isFilm).length} film · frissítve: ${last} · verzió: ${APP_VER}</div>
     <button class="btn block primary" data-act="refresh">Frissítés most</button>
-    <button class="btn block" data-act="export">Mentés iCloudba / fájlba</button>
-    <button class="btn block" data-act="import">Visszatöltés iCloudból / fájlból</button>
-    <div class="small muted" style="margin-top:8px">Mentésnél a megjelenő menüben válaszd: <b>Mentés a Fájlokba → iCloud Drive</b>. Ha már van ott mentés, nyomd meg a <b>Csere</b> gombot. Utolsó mentés: ${lsGet('nezonaplo.exportAt') ? fmtDate(+lsGet('nezonaplo.exportAt')) : 'még nem volt'}.</div>
+    <button class="btn block" data-act="export">💾 Mentés iCloudba</button>
+    <div class="small muted" style="margin-top:6px">Utolsó mentés: ${lsGet('nezonaplo.exportAt') ? fmtDate(+lsGet('nezonaplo.exportAt')) : 'még nem volt'}${driveOn ? ' · Google Drive: automatikus' : ''}</div>
   </div>
-  <div class="section-title">Automatikus mentés Google Drive-ra (választható)</div>
-  <div class="field">${lsGet('nezonaplo.driveOn') === '1' && driveOk() ? `
-    <div class="small">Automatikus mentés: <b style="color:var(--ok)">bekapcsolva</b> · utolsó: ${lsGet('nezonaplo.driveAt') ? rel(+lsGet('nezonaplo.driveAt')) + ' ' + new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(new Date(+lsGet('nezonaplo.driveAt'))) : 'még nem volt'}</div>
-    <div class="small muted" style="margin-top:4px">Ha bezárod az appot vagy frissíted a YouTube-ot, a változások felkerülnek a Drive-odra („${DRIVE_NAME}”).</div>
-    <button class="btn block primary" data-act="driveSave">Mentés most</button>
-    <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>
-    <button class="btn block" data-act="driveOff">Automatikus mentés kikapcsolása</button>` : `
-    <div class="small muted">Az iCloudba csak kézzel lehet menteni (az Apple nem engedi a weboldalaknak). Ha szeretnéd, hogy magától mentsen, kapcsold be a Google Drive-ot – az app csak a saját mentésfájlját látja ott.</div>
-    <button class="btn block primary" data-act="driveSave">Bekapcsolás</button>
-    <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>`}</div>
-  <div class="section-title">Hol nézhető? (TMDB)</div>
-  <div class="field">${tmdbKey() ? `<div class="small">TMDB-kulcs: <b style="color:var(--ok)">beállítva</b>. A sorozatok és filmek adatlapján látod, melyik szolgáltatón nézhetők Magyarországon, és a magyar leírást.</div>
-    ${lsGet('nezonaplo.tmdb') ? '<button class="btn block" data-act="tmdbReset">Saját kulcs törlése</button>' : ''}` : `<div class="small muted">Add meg az ingyenes TMDB API-kulcsodat (themoviedb.org → Beállítások → API), és az adatlapokon megjelenik, hol nézhető a sorozat vagy film Magyarországon (Netflix, Max, Disney+…), plusz a magyar leírás.</div>
+  ${group('Mentés és visszatöltés', `<div class="field">
+    <div class="small muted">Mentésnél a megjelenő menüben válaszd: <b>Mentés a Fájlokba → iCloud Drive</b>. Ha már van ott mentés, nyomd meg a <b>Csere</b> gombot.</div>
+    <button class="btn block" data-act="import">Visszatöltés iCloudból / fájlból</button></div>
+    <div class="field"><b class="small">Automatikus mentés Google Drive-ra</b>${driveOn ? `
+      <div class="small" style="margin-top:4px">Bekapcsolva · utolsó: ${lsGet('nezonaplo.driveAt') ? rel(+lsGet('nezonaplo.driveAt')) + ' ' + new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(new Date(+lsGet('nezonaplo.driveAt'))) : 'még nem volt'}</div>
+      <button class="btn block" data-act="driveSave">Mentés most</button>
+      <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>
+      <button class="btn block" data-act="driveOff">Kikapcsolás</button>` : `
+      <div class="small muted" style="margin-top:4px">Az iCloudba csak kézzel lehet menteni (az Apple nem engedi a weboldalaknak). Ha szeretnéd, hogy magától mentsen, kapcsold be a Google Drive-ot – az app csak a saját mentésfájlját látja ott.</div>
+      <button class="btn block" data-act="driveSave">Bekapcsolás</button>
+      <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>`}</div>`)}
+  ${group('Hol nézhető? (TMDB)', `<div class="field">${tmdbKey() ? `<div class="small">TMDB-kulcs: <b style="color:var(--ok)">beállítva</b>. Az adatlapokon látod, melyik szolgáltatón nézhető a sorozat vagy film Magyarországon, és a magyar leírást.</div>
+    ${lsGet('nezonaplo.tmdb') ? '<button class="btn block" data-act="tmdbReset">Saját kulcs törlése</button>' : ''}` : `<div class="small muted">Add meg az ingyenes TMDB API-kulcsodat (themoviedb.org → Beállítások → API).</div>
     <input type="text" id="tmdbIn" placeholder="API-kulcs vagy olvasási token" autocomplete="off" autocapitalize="off" autocorrect="off" style="margin-top:8px">
-    <button class="btn block primary" data-act="tmdbSave">Mentés</button>`}</div>
-  <div class="section-title">Megnézett filmek (${seenFilms.length})</div>
-  <div class="list-plain">${seenFilms.length ? seenFilms.map(mini).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}</div>
-  <div class="section-title">Befejezett sorozatok (${finished.length})</div>
-  <div class="small muted" style="padding:0 4px 8px">Ezeknél szólok, ha új évad jön.</div>
-  <div class="list-plain">${finished.length ? finished.map(mini).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}</div>
-  <div class="section-title">Abbahagyott / nem érdekel (${archived.length})</div>
-  <div class="list-plain">${archived.length ? archived.map(mini).join('') : '<div class="small muted" style="padding:0 4px">Nincs ilyen.</div>'}</div>
-  <div class="section-title">Tipp</div>
-  <div class="field small muted">A <b>Közelgő</b> fülön a naptár ikonnal egy részt vagy évadpremiert a telefon Naptárába tehetsz emlékeztetővel, így akkor is szól, ha nem nyitod meg az appot.<br><br>Az adatokat a <a href="https://www.tvmaze.com" style="color:var(--accent)">TVmaze</a> adja.</div>
-  <div class="section-title">Veszélyes zóna</div>
-  <button class="btn block danger" data-act="wipe">Minden adat törlése</button>`;
+    <button class="btn block primary" data-act="tmdbSave">Mentés</button>`}</div>`)}
+  ${group(`Megnézett filmek (${seenFilms.length})`, list(seenFilms, 'Még nincs.'))}
+  ${group(`Befejezett sorozatok (${finished.length})`, '<div class="small muted" style="padding:0 4px 8px">Ezeknél szólok, ha új évad jön.</div>' + list(finished, 'Még nincs.'))}
+  ${group(`Abbahagyott / nem érdekel (${archived.length})`, list(archived, 'Nincs ilyen.'))}
+  ${group('Tippek', `<div class="field small muted">A <b>Közelgő</b> fülön a naptár ikonnal egy részt vagy évadpremiert a telefon Naptárába tehetsz emlékeztetővel.<br><br>A kártyákat balra húzva gyorsan jelölhetsz: Nézem fülön +1 rész, Tervezemben Láttam/Elkezdem, a YouTube új videóinál balra Nem érdekel, jobbra Érdekel.<br><br>Adatok: <a href="https://www.tvmaze.com" style="color:var(--accent)">TVmaze</a>, Wikidata, TMDB/JustWatch.</div>`)}
+  ${group('Veszélyes zóna', '<button class="btn block danger" data-act="wipe">Minden adat törlése</button>')}`;
 }
 
 /* ---------- lapok (sheet) ---------- */
-function openSheet(st){ sheetState = st; $('#sheetBg').classList.add('open');
+function openSheet(st){ sheetState = st; moreOpen = false; $('#sheetBg').classList.add('open');
   if (st.type === 'detail') { const sh = byId(st.id); if (sh) tmdbLoad(sh).then(ch => { if (ch && sheetState && sheetState.id === st.id) renderDetail(); }); }
-  if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); }
+  if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); else if (st.type === 'disc') renderDiscDetail(); else if (st.type === 'stats') renderStats(); }
 function closeSheet(){ sheetState = null; $('#sheetBg').classList.remove('open'); $('#sheet').innerHTML = ''; }
 
 function renderSearch(){
@@ -1194,6 +1280,8 @@ function saveManual(){
   save(); closeSheet(); tab = status; lsSet('sorozatmemoria.tab', tab); render(); toast(`${name} hozzáadva`);
 }
 
+let moreOpen = false;
+document.addEventListener('toggle', e => { const t = e.target; if (!t.classList || !t.classList.contains('more')) return; if (t.dataset.g) grpOpen[t.dataset.g] = t.open; else moreOpen = t.open; }, true);
 function renderDetail(){
   const sh = byId(sheetState.id); if (!sh) { closeSheet(); return; }
   const sheet = $('#sheet');
@@ -1236,9 +1324,11 @@ function renderDetail(){
       ${['nezem','tervezem','befejeztem','abbahagytam'].map(v => `<button data-v="${v}" class="${sh.status === v ? 'on' : ''}">${{nezem:'Nézem',tervezem:'Tervezem',befejeztem:'Befejeztem',abbahagytam:'Abbahagytam'}[v]}</button>`).join('')}</div>
       ${sh.status === 'befejeztem' ? '<div class="small muted" style="margin-top:6px">Szólok, ha új évad jön.</div>' : ''}</div>
     <div class="field"><label>Hol tartasz? (az utolsó rész, amit láttál)</label>${progress}</div>
-    ${starsHtml(sh)}
-    ${provHtml(sh)}${descHtml(sh)}
     <div class="field"><label>Következő</label><div>${next}</div></div>
+    ${provHtml(sh)}${descHtml(sh)}
+    ${starsHtml(sh)}
+    <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. HBO Max-on van">${esc(sh.notes)}</textarea></div>
+    <details class="more" ${moreOpen ? 'open' : ''}><summary>További beállítások</summary>
     ${sh.tvmazeId ? `<div class="field"><label>Streamingen előrébb jár? (pl. RTL+ Premium, TV2 Play Prémium)</label>
       <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>` : ''}
     <div class="field"><label>Saját adásrend (ha a dátum hiányzik vagy hibás, pl. szombat 20:00)</label>
@@ -1248,13 +1338,12 @@ function renderDetail(){
     <div class="field"><label>Saját emlékeztető dátum (pl. ha olvastál az új évadról)</label>
       <input type="date" id="dDate" value="${sh.manualNext ? esc(sh.manualNext.date) : ''}">
       <input type="text" id="dLabel" placeholder="pl. 3. évad premier" value="${sh.manualNext ? esc(sh.manualNext.label) : ''}" style="margin-top:8px"></div>
-    <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. HBO Max-on van">${esc(sh.notes)}</textarea></div>
-    ${sh.tvmazeId ? `<button class="btn block" data-act="refreshOne" data-id="${sh.id}">Adatok frissítése</button>` :
-      `<div class="field"><label>Automatikus részek és dátumok</label>
-        <div class="small muted">Ezt a sorozatot kézzel vetted fel, ezért nem kap automatikusan új részeket. Keresd meg az adatbázisban – ahol tartasz, az megmarad.</div>
-        <button class="btn block" data-act="linkSearch" data-id="${sh.id}">Keresés az adatbázisban</button><div id="linkRes" style="margin-top:10px"></div></div>`}
+    ${sh.tvmazeId ? `<button class="btn block" data-act="refreshOne" data-id="${sh.id}">Adatok frissítése</button>` : ''}
     ${sh.customImage ? `<button class="btn block" data-act="coverReset" data-id="${sh.id}">Saját borító törlése</button>` : ''}
-    <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button>`;
+    <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button></details>
+    ${sh.tvmazeId ? '' : `<div class="field"><label>Automatikus részek és dátumok</label>
+        <div class="small muted">Ezt a sorozatot kézzel vetted fel, ezért nem kap automatikusan új részeket. Keresd meg az adatbázisban – ahol tartasz, az megmarad.</div>
+        <button class="btn block" data-act="linkSearch" data-id="${sh.id}">Keresés az adatbázisban</button><div id="linkRes" style="margin-top:10px"></div></div>`}`;
 
   $('#dSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; sh.status = b.dataset.v; save(); render(); });
   const saveSched = () => {
@@ -1295,16 +1384,17 @@ function renderFilmDetail(sh){
         (fd && fd.d > now() ? `<div style="color:var(--accent);font-weight:700;margin-top:6px">Várható: ${esc(fmtFilmDate(fd))}</div>` : '')}</div></div>
     <div class="field"><label>Lista</label><div class="seg" id="dSeg">
       ${[['tervezem','Megnézném'],['lattam','Láttam'],['abbahagytam','Nem érdekel']].map(([v, l]) => `<button data-v="${v}" class="${sh.status === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-    ${sh.status === 'lattam' ? starsHtml(sh) : ''}
-    ${provHtml(sh)}${descHtml(sh)}
     ${dates.length ? `<div class="field"><label>Megjelenés</label>${dates.map(d => `<div>${d}</div>`).join('')}</div>` : ''}
+    ${provHtml(sh)}${descHtml(sh)}
+    ${sh.status === 'lattam' ? starsHtml(sh) : ''}
+    <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. Peti ajánlotta, Max-on van">${esc(sh.notes)}</textarea></div>
+    <details class="more" ${moreOpen ? 'open' : ''}><summary>További beállítások</summary>
     <div class="field"><label>Saját emlékeztető (pl. mikor kerül streamingre)</label>
       <input type="date" id="dDate" value="${sh.manualNext ? esc(sh.manualNext.date) : ''}">
       <input type="text" id="dLabel" placeholder="pl. Netflixre kerül" value="${sh.manualNext ? esc(sh.manualNext.label) : ''}" style="margin-top:8px"></div>
-    <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. Peti ajánlotta, Max-on van">${esc(sh.notes)}</textarea></div>
     ${sh.qid ? `<button class="btn block" data-act="refreshOne" data-id="${sh.id}">Adatok frissítése</button>` : ''}
     ${sh.customImage ? `<button class="btn block" data-act="coverReset" data-id="${sh.id}">Saját borító törlése</button>` : ''}
-    <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button>`;
+    <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button></details>`;
   $('#dSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     sh.status = b.dataset.v; if (sh.status === 'lattam' && !sh.seenAt) sh.seenAt = now(); save(); render(); if (sh.status === 'lattam') sequelCheck(sh); });
   const saveManualNext = () => { const d = $('#dDate').value; sh.manualNext = d ? {date:d, label:$('#dLabel').value.trim()} : null; save(); };
@@ -1347,6 +1437,7 @@ async function tmdbResolve(sh){
 const provList = a => (a || []).map(p => ({n: p.provider_name, l: p.logo_path}));
 async function tmdbLoad(sh, force){
   if (!tmdbKey() || (!force && sh.tmdbInfo && now() - sh.tmdbInfo.at < 3 * DAY)) return false;
+  sh.loading = true;
   try {
     const t = await tmdbResolve(sh);
     if (!t) { sh.tmdbInfo = {at: now(), none: true}; save(); return true; }
@@ -1356,9 +1447,10 @@ async function tmdbLoad(sh, force){
       flat: provList(hu.flatrate), free: provList([...(hu.free || []), ...(hu.ads || [])]), rent: provList(hu.rent), buy: provList(hu.buy)};
     // magyar sorozatcím, ha van fordítás (és nem írtad át)
     const huName = det.name || det.title, orig = det.original_name || det.original_title;
-    if (!isFilm(sh) && !sh.customName && huName && huName !== orig && huName !== sh.name) { sh.name = huName; sh.customName = true; }
+    if (!isFilm(sh) && !sh.customName && sh.id && huName && huName !== orig && huName !== sh.name) { sh.name = huName; sh.customName = true; }
     save(); return true;
   } catch(e) { if (e.status === 401) toast('Hibás TMDB-kulcs'); return false; }
+  finally { delete sh.loading; }
 }
 // a Tervezem/Nézem listák elemeinek háttérben feltöltése (sorban, kíméletesen)
 async function tmdbFill(){
@@ -1371,7 +1463,7 @@ async function tmdbFill(){
 function provHtml(sh){
   if (!tmdbKey()) return '';
   const i = sh.tmdbInfo;
-  if (!i) return `<div class="field"><label>Hol nézhető Magyarországon?</label><div class="small muted">Betöltés…</div></div>`;
+  if (!i) return sh.loading ? `<div class="field"><label>Hol nézhető Magyarországon?</label><div class="small muted">Betöltés…</div></div>` : '';
   if (i.none) return '';
   const chips = a => a.map(p => `<span class="prov">${p.l ? `<img src="https://image.tmdb.org/t/p/w92${esc(p.l)}" alt="">` : ''}${esc(p.n)}</span>`).join('');
   const rows = [['Előfizetéssel', i.flat], ['Ingyen', i.free], ['Bérelhető', i.rent], ['Megvásárolható', i.buy]].filter(([, a]) => a && a.length);
@@ -1449,31 +1541,45 @@ function discListHtml(){
   for (const it of list) {
     const d = new Date(it.d);
     const month = new Intl.DateTimeFormat('hu-HU', {year: 'numeric', month: 'long'}).format(d);
-    if (month !== lastMonth) { html += `<div class="section-title">${month}</div>`; lastMonth = month; }
-    let name, sub, img, have, act;
-    if (it.f) {
-      const f = it.f;
-      name = f.name; img = f.image;
-      sub = [words.length ? 'Film' : '', f.huRelease ? 'Magyar mozi' : 'Premier külföldön', f.orig && f.orig !== f.name ? f.orig : '', f.desc].filter(Boolean).join(' · ');
-      have = state.shows.some(sh => sh.qid === f.qid);
-      act = `data-act="discAdd" data-qid="${esc(f.qid)}"`;
-    } else {
-      const x = it.x;
-      name = x.huName || x.name; img = x.image;
-      sub = [x.season > 1 ? `${x.season}. évad` : 'Új sorozat', x.huName ? x.name : '', x.network, genresHu(x.genres).slice(0, 2).join(', ')].filter(Boolean).join(' · ');
-      have = state.shows.some(sh => sh.tvmazeId === x.id);
-      act = `data-act="discAdd" data-tid="${x.id}"`;
-    }
-    html += `<div class="day-row">
-      <div class="date-chip"><div class="m">${new Intl.DateTimeFormat('hu-HU',{month:'short'}).format(d).replace('.','')}</div>
-        <div class="d">${d.getDate()}</div><div class="w">${new Intl.DateTimeFormat('hu-HU',{weekday:'short'}).format(d)}</div></div>
-      ${posterHtml({image: img, name}, 'poster disc-poster')}
-      <div class="body" style="flex:1;min-width:0"><div style="font-weight:700;line-height:1.25">${esc(name)}${forMe(it, prof) ? ' <span title="A kedvenc műfajaid alapján">✨</span>' : ''}</div>
-        <div class="sub muted small" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(sub)}</div></div>
-      ${have ? '<span class="small muted" style="flex:none">✓ Listán</span>' : `<div class="acts" style="display:flex;flex-direction:column;gap:6px;flex:none">
-        <button class="btn primary" ${act}>Érdekel</button><button class="btn" data-act="discHide" data-key="${esc(discKey(it))}">Nem érdekel</button></div>`}</div>`;
+    if (month !== lastMonth) { html += (lastMonth ? '</div>' : '') + `<div class="section-title">${month}</div><div class="dgrid">`; lastMonth = month; }
+    const v = discView(it);
+    html += `<div class="dtile" data-act="discOpen" data-key="${esc(discKey(it))}">
+      <div class="dimg">${posterHtml({image: v.img, name: v.name}, 'poster')}
+        <span class="dbadge">${new Intl.DateTimeFormat('hu-HU',{month:'short', day:'numeric'}).format(d)}</span>
+        ${v.have ? '<span class="dhave">✓</span>' : forMe(it, prof) ? '<span class="dhave me">✨</span>' : ''}</div>
+      <div class="dname">${esc(v.name)}</div><div class="dsub">${esc(v.short)}</div></div>`;
   }
-  return html + hiddenHtml + `<div class="small muted" style="padding:10px 4px">Sorozatok: TVmaze (népszerűség szerint szűrve), filmek: Wikidata. Naponta frissül.</div>`;
+  if (lastMonth) html += '</div>';
+  return html + hiddenHtml + `<div class="small muted" style="padding:10px 4px">Sorozatok: TVmaze (népszerűség szerint szűrve), filmek: Wikidata. Naponta frissül. Koppints egy plakátra a részletekért.</div>`;
+}
+// egy Felfedezés-elem megjelenítési adatai
+function discView(it){
+  if (it.f) { const f = it.f;
+    return {name: f.name, img: f.image, orig: f.orig && f.orig !== f.name ? f.orig : '', have: state.shows.some(sh => sh.qid === f.qid),
+      short: f.huRelease ? 'Magyar mozi' : 'Mozifilm', sub: [f.huRelease ? 'Magyar mozibemutató' : 'Premier külföldön', f.desc].filter(Boolean).join(' · '),
+      act: `data-act="discAdd" data-qid="${esc(f.qid)}"`, tmp: {kind: 'film', name: f.name, meta: {tmdbId: f.tmdbId, imdb: f.imdb}}}; }
+  const x = it.x;
+  return {name: x.huName || x.name, img: x.image, orig: x.huName ? x.name : '', have: state.shows.some(sh => sh.tvmazeId === x.id),
+    short: [x.season > 1 ? `${x.season}. évad` : 'Új sorozat', x.network].filter(Boolean).join(' · '),
+    sub: [x.season > 1 ? `${x.season}. évad` : 'Új sorozat', x.network, genresHu(x.genres).join(', ')].filter(Boolean).join(' · '),
+    act: `data-act="discAdd" data-tid="${x.id}"`, tmp: {kind: 'sorozat', tvmazeId: x.id, name: x.name, customName: true}};
+}
+const discTmp = {};  // TMDB-adatok a Felfedezés adatlapjához (csak memóriában)
+function renderDiscDetail(){
+  const key = sheetState.key, it = discItems('').find(i => discKey(i) === key);
+  if (!it) { closeSheet(); return; }
+  const v = discView(it), d = new Date(it.d), hidden = !!discHidden[key];
+  const tmp = discTmp[key] = discTmp[key] || v.tmp;
+  $('#sheet').innerHTML = `<div class="sheet-head"><h2 style="font-size:17px" class="muted">${it.f ? 'Mozifilm' : 'Sorozat'}</h2><button class="btn" data-act="close">Kész</button></div>
+    <div class="detail-top">${posterHtml({image: v.img, name: v.name}, 'poster')}
+      <div><div style="font-size:22px;font-weight:800;line-height:1.2">${esc(v.name)}</div>
+      ${v.orig ? `<div class="muted small" style="margin-top:4px">${esc(v.orig)}</div>` : ''}
+      <div class="muted small" style="margin-top:4px">${esc(v.sub)}</div>
+      <div style="color:var(--accent);font-weight:700;margin-top:6px">${it.f ? (it.f.huRelease ? 'Magyar premier' : 'Premier') : (it.x.season > 1 ? 'Évadpremier' : 'Premier')}: ${rel(it.d)}${dayDiff(it.d) > 6 ? '' : ' (' + fmtDate(it.d) + ')'}</div></div></div>
+    ${v.have ? '<div class="field small">✓ Már a listádon van.</div>' : hidden ? `<button class="btn block" data-act="discUnhide" data-key="${esc(key)}">Visszahoz (most rejtve)</button>` :
+      `<div class="row"><button class="btn primary" style="padding:13px" ${v.act}>Érdekel</button><button class="btn" style="padding:13px" data-act="discHide" data-key="${esc(key)}">Nem érdekel</button></div>`}
+    <div style="height:10px"></div>${provHtml(tmp)}${descHtml(tmp)}`;
+  if (tmdbKey() && !tmp.tmdbInfo && !tmp.tried) { tmp.tried = true; tmdbLoad(tmp, true).then(ok => { if (ok && sheetState && sheetState.key === key) renderDiscDetail(); }); }
 }
 function bindDiscSearch(){
   const me = $('#discMe'); if (me) me.addEventListener('change', () => { discForMe = me.checked; lsSet('nezonaplo.discForMe', discForMe ? '1' : ''); const box = $('#discList'); if (box) box.innerHTML = discListHtml(); });
@@ -1683,8 +1789,47 @@ function icsFor(key){
   shareOrDownload(`${it.sh.name.replace(/[^\p{L}\p{N}]+/gu,'-')}-${ymd(d)}.ics`, 'text/calendar', ics);
 }
 
+/* ---------- húzásos gesztusok ---------- */
+let swipedAt = 0;
+(() => {
+  let el = null, x0 = 0, y0 = 0, dx = 0, mode = '';
+  const TH = 90;
+  const reset = () => { if (!el) return; el.style.transition = 'transform .2s'; el.style.transform = ''; el.classList.remove('sw-l', 'sw-r', 'sw-go');
+    const e = el; setTimeout(() => { e.style.transition = ''; }, 220); el = null; mode = ''; };
+  document.addEventListener('touchstart', e => {
+    const t = e.target.closest('[data-swipe-l],[data-swipe-r]'); if (!t || e.touches.length > 1) return;
+    el = t; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mode = '';
+  }, {passive: true});
+  document.addEventListener('touchmove', e => {
+    if (!el) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (!mode) { if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { el = null; return; } if (Math.abs(mx) > 12) mode = 'h'; else return; }
+    e.preventDefault();
+    dx = mx;
+    if ((dx < 0 && !el.dataset.swipeL) || (dx > 0 && !el.dataset.swipeR)) dx = dx / 6; // arra nincs művelet: csak kicsit enged
+    el.style.transform = `translateX(${dx}px)`;
+    el.classList.toggle('sw-l', dx < 0 && !!el.dataset.swipeL); el.classList.toggle('sw-r', dx > 0 && !!el.dataset.swipeR);
+    el.classList.toggle('sw-go', Math.abs(dx) > TH);
+  }, {passive: false});
+  const end = () => {
+    if (!el) return;
+    if (mode === 'h') {
+      swipedAt = now();
+      const act = dx < -TH ? el.dataset.swipeL : dx > TH ? el.dataset.swipeR : '';
+      const src = el; reset();
+      if (act) { // ugyanazon az úton fut, mint a gombok
+        const b = document.createElement('button'); b.hidden = true; b.dataset.act = act;
+        if (src.dataset.id) b.dataset.id = src.dataset.id; if (src.dataset.vid) b.dataset.vid = src.dataset.vid;
+        document.body.appendChild(b); swipedAt = 0; b.click(); b.remove(); swipedAt = now();
+      }
+    } else el = null;
+  };
+  document.addEventListener('touchend', end); document.addEventListener('touchcancel', () => { if (el) reset(); });
+})();
+
 /* ---------- események ---------- */
 document.addEventListener('click', e => {
+  if (now() - swipedAt < 400) return; // húzás után ne nyíljon meg az adatlap
   const el = e.target.closest('[data-act],[data-tab]'); if (!el) return;
   if (el.dataset.tab) { tab = el.dataset.tab; lsSet('sorozatmemoria.tab', tab); render(); window.scrollTo(0,0);
     if (tab === 'youtube' && yt.fetchedAt && now() - yt.fetchedAt > 30 * 60e3) {
@@ -1743,9 +1888,11 @@ document.addEventListener('click', e => {
       lsSet('nezonaplo.ytTok', ''); yt = {channels:[], videos:[], seen:{}, hidden:{}, later:{}, nope:{}, fetchedAt:0}; ytSave(); render(); } break;
     case 'kozView': kozView = el.dataset.v; lsSet('nezonaplo.kozView', kozView); render(); window.scrollTo(0,0); break;
     case 'discKind': discKind = el.dataset.v; lsSet('nezonaplo.discKind', discKind); render(); window.scrollTo(0,0); break;
-    case 'discAdd': e.stopPropagation(); discAdd(el); break;
-    case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); break;
-    case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); break;
+    case 'discAdd': e.stopPropagation(); discAdd(el).then(() => { if (sheetState && sheetState.type === 'disc') renderDiscDetail(); }); if (sheetState && sheetState.type === 'disc') setTimeout(renderDiscDetail, 50); break;
+    case 'statsOpen': openSheet({type: 'stats'}); break;
+    case 'discOpen': openSheet({type: 'disc', key: el.dataset.key}); break;
+    case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); if (sheetState && sheetState.type === 'disc') closeSheet(); break;
+    case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); if (sheetState && sheetState.type === 'disc') renderDiscDetail(); break;
     case 'discShowHidden': showHiddenDisc = !showHiddenDisc; render(); break;
     case 'rate': { const v = +el.dataset.v; sh.rating = sh.rating === v ? 0 : v; save(); render(); break; }
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;

@@ -180,6 +180,8 @@ def parse_film(x):
         "release": first["d"], "prec": first["prec"], "huRelease": huf["d"] if huf else None,
         "image": f"https://commons.wikimedia.org/wiki/Special:FilePath/{urllib.parse.quote(img)}?width=200" if img else None,
         "sort": key["d"],
+        "tmdbId": (((c.get("P4947") or [{}])[0].get("mainsnak") or {}).get("datavalue") or {}).get("value"),
+        "imdb": (((c.get("P345") or [{}])[0].get("mainsnak") or {}).get("datavalue") or {}).get("value"),
     }
 
 
