@@ -161,7 +161,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '14';
+const APP_VER = '15';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -235,7 +235,8 @@ function nextUnwatched(sh){ return eps(sh).find(e => after(e, sh.lastSeason, sh.
 // akkor a következő 'ahead' darab tévés rész is már nézhetőnek számít.
 function availUntil(sh){
   const t = now(); if (!sh.ahead) return t;
-  const fut = eps(sh).filter(e => e.d && e.d > t).sort((a, b) => a.d - b.d);
+  // csak a 14 napon belül adásba kerülő részek (évadszünet után ne számítson elérhetőnek a következő évad)
+  const fut = eps(sh).filter(e => e.d && e.d > t && e.d - t < 14 * DAY).sort((a, b) => a.d - b.d);
   return fut.length ? Math.max(t, fut[Math.min(sh.ahead, fut.length) - 1].d) : t;
 }
 function unwatchedAired(sh){ const t = availUntil(sh); return eps(sh).filter(e => after(e, sh.lastSeason, sh.lastEpisode) && e.d && e.d <= t); }
@@ -483,7 +484,7 @@ async function plSync(){
       const sn = it.snippet || {}, vid = (it.contentDetails || {}).videoId || (sn.resourceId || {}).videoId;
       if (!vid || /^(Private|Deleted) video$/.test(sn.title)) continue;
       const old = yt.later[vid] || {};
-      later[vid] = {id: vid, pli: it.id, title: sn.title, ch: sn.videoOwnerChannelId || old.ch, chTitle: sn.videoOwnerChannelTitle || old.chTitle || '',
+      later[vid] = {id: vid, pli: it.id, watched: old.watched, title: sn.title, ch: sn.videoOwnerChannelId || old.ch, chTitle: sn.videoOwnerChannelTitle || old.chTitle || '',
         pub: Date.parse((it.contentDetails || {}).videoPublishedAt || sn.publishedAt), savedAt: Date.parse(sn.publishedAt),
         thumb: ((sn.thumbnails || {}).medium || (sn.thumbnails || {}).default || {}).url || null, extra: old.extra};
     }
@@ -580,7 +581,7 @@ function renderYtDetail(){
   const v = ytFind(sheetState.vid); if (!v) { closeSheet(); return; }
   const ch = (yt.channels.find(c => c.id === v.ch) || {}).title || v.chTitle || '';
   const ex = v.extra || {};
-  const seen = !!yt.seen[v.id], later = !!(yt.later || {})[v.id];
+  const later = !!(yt.later || {})[v.id], seen = later ? !!yt.later[v.id].watched : !!yt.seen[v.id];
   const when = new Intl.DateTimeFormat('hu-HU', {year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}).format(new Date(v.pub));
   const desc = ex.desc ? esc(ex.desc).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>') : '';
   $('#sheet').innerHTML = `<div class="sheet-head"><h2 style="font-size:17px" class="muted">Videó</h2><button class="btn" data-act="close">Kész</button></div>
@@ -632,7 +633,7 @@ function renderYoutube(){
   const fresh = list.filter(v => !yt.seen[v.id]), old = list.filter(v => yt.seen[v.id] && !yt.later[v.id]).slice(0, 80);
   const row = v => `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${esc(v.id)}">
       ${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
-      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}</div></div>
+      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${yt.later[v.id] && yt.seen[v.id] && v.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div></div>
       ${yt.nope[v.id] ? `<button class="btn" data-act="ytNope" data-vid="${esc(v.id)}">Visszahoz</button>` :
         !yt.seen[v.id] && !yt.later[v.id] ? `<div style="display:flex;flex-direction:column;gap:6px;flex:none">
           <button class="btn primary" data-act="ytWant" data-vid="${esc(v.id)}">Érdekel</button>
@@ -1284,7 +1285,9 @@ async function shareOrDownload(filename, mime, text){
 function exportData(){
   const d = new Date();
   shareOrDownload(`sorozatmemoria-${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}.json`, 'application/json',
-    JSON.stringify({app:'sorozatmemoria', version:1, exported:d.toISOString(), shows:state.shows.map(sh => Object.assign({}, sh, {cache:null}))}, null, 1));
+    JSON.stringify({app:'sorozatmemoria', version:1, exported:d.toISOString(), shows:state.shows.map(sh => Object.assign({}, sh, {cache:null})),
+      youtube:{seen:yt.seen, nope:yt.nope, hidden:yt.hidden, later:yt.later, pl:yt.pl || null, plDel:yt.plDel || []},
+      prefs:{discHidden}}, null, 1));
 }
 function importData(file){
   const r = new FileReader();
@@ -1294,6 +1297,9 @@ function importData(file){
       if (!j || !Array.isArray(j.shows)) throw new Error('nem jó fájl');
       if (!confirm(`${j.shows.length} sorozat betöltése? Ez lecseréli a mostani listát.`)) return;
       state = {shows:j.shows.map(sh => Object.assign({lastSeason:0, lastEpisode:0, notes:'', manualNext:null, cache:null}, sh, {id: sh.id || uid()})), lastRefresh:0};
+      if (j.youtube) { Object.assign(yt, {seen:j.youtube.seen || {}, nope:j.youtube.nope || {}, hidden:j.youtube.hidden || {},
+        later:j.youtube.later || {}, pl:j.youtube.pl || null, plDel:j.youtube.plDel || []}); ytSave(); }
+      if (j.prefs && j.prefs.discHidden) { discHidden = j.prefs.discHidden; saveDiscHidden(); }
       save(); render(); toast('Visszatöltve'); refreshAll(true);
     } catch(e) { toast('Hibás fájl: ' + e.message); }
   };
@@ -1318,7 +1324,10 @@ function icsFor(key){
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act],[data-tab]'); if (!el) return;
   if (el.dataset.tab) { tab = el.dataset.tab; lsSet('sorozatmemoria.tab', tab); render(); window.scrollTo(0,0);
-    if (tab === 'youtube' && ytToken() && now() - yt.fetchedAt > 30 * 60e3) ytRefresh(false);
+    if (tab === 'youtube' && yt.fetchedAt && now() - yt.fetchedAt > 30 * 60e3) {
+      if (ytToken()) ytRefresh(false);
+      else if (now() - (+lsGet('nezonaplo.ytAuto') || 0) > 10 * 60e3 && navigator.onLine) { lsSet('nezonaplo.ytAuto', String(now())); ytLogin(true); }
+    }
     return; }
   const id = el.dataset.id, sh = id && byId(id);
   switch (el.dataset.act) {
@@ -1345,7 +1354,7 @@ document.addEventListener('click', e => {
       lsSet('nezonaplo.ytClient', v); render(); break; }
     case 'ytClientReset': lsSet('nezonaplo.ytClient', ''); render(); break;
     case 'ytLogin': ytLogin(false); break;
-    case 'ytOpen': yt.seen[el.dataset.vid] = 1; ytSave(); setTimeout(() => { render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); }, 400); break; // a link megnyílik (YouTube app)
+    case 'ytOpen': yt.seen[el.dataset.vid] = 1; if (yt.later[el.dataset.vid]) yt.later[el.dataset.vid].watched = 1; ytSave(); setTimeout(() => { render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); }, 400); break; // a link megnyílik (YouTube app)
     case 'ytDetail': openSheet({type:'yt', vid: el.dataset.vid}); break;
     case 'ytNope': { const id = el.dataset.vid; if (yt.nope[id]) delete yt.nope[id]; else { yt.nope[id] = 1; toast('Elrejtve'); }
       ytSave(); render(); if (sheetState && sheetState.type === 'yt') closeSheet(); break; }
@@ -1354,7 +1363,9 @@ document.addEventListener('click', e => {
     case 'plChoose': plChoose(el.dataset.id, el.dataset.title); break;
     case 'plCancel': plChoices = null; render(); break;
     case 'ytShowNope': showNope = !showNope; render(); break;
-    case 'ytSeenToggle': { const id = el.dataset.vid; if (yt.seen[id]) delete yt.seen[id]; else yt.seen[id] = 1; ytSave(); render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
+    case 'ytSeenToggle': { const id = el.dataset.vid, lt = yt.later[id];
+      const was = lt ? !!lt.watched : !!yt.seen[id];
+      if (was) { delete yt.seen[id]; if (lt) delete lt.watched; } else { yt.seen[id] = 1; if (lt) lt.watched = 1; } ytSave(); render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
     case 'ytLater': { const id = el.dataset.vid, v = ytFind(id);
       (yt.later[id] ? ytRemoveLater(id) : v ? ytAddLater(v) : Promise.resolve()).then(() => { if (sheetState && sheetState.type === 'yt') renderYtDetail(); });
       if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
