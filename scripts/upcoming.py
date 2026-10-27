@@ -3,7 +3,7 @@
 A GitHub naponta lefuttatja (.github/workflows/frissites.yml), de kézzel is
 futtatható a repo gyökeréből:  python3 scripts/upcoming.py
 """
-import json, re, time, urllib.parse, urllib.request
+import json, os, re, time, urllib.parse, urllib.request
 from datetime import date, timedelta
 
 UA = {"User-Agent": "Nezonaplo/1.0 (https://greativo13.github.io/sorozatok/)"}
@@ -116,8 +116,28 @@ def films():
                 out.append(dict(f, qid=qid))
         time.sleep(1)
     add_posters(out)
+    add_genres(out)
     out.sort(key=lambda f: f["sort"])
     return out
+
+
+# TMDB műfaj-azonosító -> ugyanaz a név, amit a TVmaze a sorozatoknál használ (az app fordítja magyarra)
+TMDB_GENRES = {28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
+               18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
+               9648: "Mystery", 10749: "Romance", 878: "Science-Fiction", 53: "Thriller", 10752: "War", 37: "Western"}
+TMDB_KEY = os.environ.get("TMDB_KEY") or "3a59373cb0306b9701118f8cfc3b6644"  # csak olvasási kulcs (az appban is ez van)
+
+
+def add_genres(films):
+    for f in films:
+        if not f.get("tmdbId"):
+            continue
+        try:
+            j = get(f"https://api.themoviedb.org/3/movie/{f['tmdbId']}?api_key={TMDB_KEY}", tries=2)
+            f["genres"] = [TMDB_GENRES[g["id"]] for g in j.get("genres", []) if g["id"] in TMDB_GENRES]
+        except Exception as e:
+            print("műfaj hiba:", f["name"], e)
+        time.sleep(0.1)
 
 
 def add_posters(films):

@@ -227,13 +227,13 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '21';
+const APP_VER = '22';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
 const STALE = 12 * 3600e3;
 const TITLES = {nezem:'Nézem', tervezem:'Tervezem', kozelgo:'Közelgő', youtube:'YouTube', beall:'Beállítások'};
-const GENRE_HU = {Action:'Akció', Adult:'Felnőtt', Adventure:'Kaland', Anime:'Anime', Children:'Gyerek', Comedy:'Vígjáték',
+const GENRE_HU = {Action:'Akció', Adult:'Felnőtt', Adventure:'Kaland', Anime:'Anime', Animation:'Animáció', Documentary:'Dokumentum', Children:'Gyerek', Comedy:'Vígjáték',
   Crime:'Krimi', DIY:'Barkács', Drama:'Dráma', Espionage:'Kém', Family:'Családi', Fantasy:'Fantasy', Food:'Gasztro', History:'Történelmi',
   Horror:'Horror', Legal:'Jogi', Medical:'Orvosi', Music:'Zenei', Mystery:'Rejtély', Nature:'Természet', Romance:'Romantikus',
   'Science-Fiction':'Sci-fi', Sports:'Sport', Supernatural:'Természetfeletti', Thriller:'Thriller', Travel:'Utazás', War:'Háborús', Western:'Western'};
@@ -419,7 +419,7 @@ async function wdEntities(ids){
 async function fetchFilm(sh){
   const e = (await wdEntities([sh.qid]))[sh.qid]; if (!e || e.missing !== undefined) return;
   const f = parseFilm(e);
-  sh.meta = f.meta; if (!sh.customImage) sh.image = f.image || sh.image;
+  sh.meta = Object.assign({}, f.meta, {genres: (sh.meta || {}).genres}); if (!sh.customImage) sh.image = f.image || sh.image;
   sh.cache = {fetchedAt: now()}; state.lastRefresh = now();
 }
 // a film számunkra fontos dátuma: magyar premier, ha van, különben az első
@@ -1386,6 +1386,7 @@ function renderFilmDetail(sh){
     <div class="detail-top">${coverHtml(sh)}
       <div><div style="font-size:22px;font-weight:800;line-height:1.2">${esc(sh.name)}</div>
       ${m.orig && m.orig !== sh.name ? `<div class="muted small" style="margin-top:4px">${esc(m.orig)}</div>` : ''}
+      ${m.genres && m.genres.length ? `<div class="muted small" style="margin-top:4px">${esc(genresHu(m.genres).join(', '))}</div>` : ''}
       ${m.desc ? `<div class="muted small" style="margin-top:4px">${esc(m.desc)}</div>` : ''}
       ${nx ? `<div style="color:var(--accent);font-weight:700;margin-top:6px">${esc(nx.label)}: ${rel(nx.d)}</div>` :
         (fd && fd.d > now() ? `<div style="color:var(--accent);font-weight:700;margin-top:6px">Várható: ${esc(fmtFilmDate(fd))}</div>` : '')}</div></div>
@@ -1450,6 +1451,8 @@ async function tmdbLoad(sh, force){
     if (!t) { sh.tmdbInfo = {at: now(), none: true}; save(); return true; }
     const [det, prov] = await Promise.all([tmdbGet(`/${t.type}/${t.id}`, {language: 'hu-HU'}), tmdbGet(`/${t.type}/${t.id}/watch/providers`)]);
     const hu = (prov.results || {}).HU || {};
+    const G = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',99:'Documentary',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Science-Fiction',53:'Thriller',10752:'War',37:'Western'};
+    if (isFilm(sh) && sh.id && det.genres) sh.meta = Object.assign({}, sh.meta, {genres: det.genres.map(g => G[g.id]).filter(Boolean)});
     sh.tmdbInfo = {at: now(), overview: det.overview || '', link: hu.link || '',
       flat: provList(hu.flatrate), free: provList([...(hu.free || []), ...(hu.ads || [])]), rent: provList(hu.rent), buy: provList(hu.buy)};
     // magyar sorozatcím, ha van fordítás (és nem írtad át)
@@ -1462,7 +1465,7 @@ async function tmdbLoad(sh, force){
 // a Tervezem/Nézem listák elemeinek háttérben feltöltése (sorban, kíméletesen)
 async function tmdbFill(){
   if (!tmdbKey() || tmdbFill.busy) return; tmdbFill.busy = true;
-  for (const sh of state.shows.filter(sh => sh.status === 'tervezem' || sh.status === 'nezem')) {
+  for (const sh of state.shows.filter(sh => sh.status === 'tervezem' || sh.status === 'nezem' || (isFilm(sh) && sh.status === 'lattam' && !(sh.meta && sh.meta.genres)))) {
     if (await tmdbLoad(sh)) { render(); await sleep(300); }
   }
   tmdbFill.busy = false;
@@ -1500,14 +1503,14 @@ let showHiddenDisc = false, discQuery = '', discForMe = lsGet('nezonaplo.discFor
 function genreProfile(){
   const w = {};
   for (const sh of state.shows) {
-    if (isFilm(sh) || sh.status === 'abbahagytam' || !sh.meta || !sh.meta.genres) continue;
-    const k = 1 + (sh.rating ? (sh.rating - 3) * 0.5 : 0) + (sh.status === 'nezem' ? 0.5 : 0);
+    if (sh.status === 'abbahagytam' || !sh.meta || !sh.meta.genres) continue;
+    const k = (isFilm(sh) ? 0.7 : 1) + (sh.rating ? (sh.rating - 3) * 0.5 : 0) + (sh.status === 'nezem' ? 0.5 : 0);
     for (const g of sh.meta.genres) w[g] = (w[g] || 0) + k;
   }
   const max = Math.max(0, ...Object.values(w));
   return new Set(Object.keys(w).filter(g => w[g] >= Math.max(1.5, max * 0.4)));
 }
-const forMe = (it, prof) => !!it.x && (it.x.genres || []).some(g => prof.has(g));
+const forMe = (it, prof) => ((it.x || it.f).genres || []).some(g => prof.has(g));
 function loadUpcoming(){
   if (!loadUpcoming.p) loadUpcoming.p = fetch('upcoming.json').then(r => r.json()).then(j => { upc = j; render(); })
     .catch(() => { loadUpcoming.p = null; upc = {error: true}; render(); });
@@ -1530,7 +1533,7 @@ function renderDiscover(){
     `<button data-act="discKind" data-v="${v}" class="${discKind === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (upc.error) return seg + '<div class="empty">Nem sikerült betölteni (nincs internet?).</div>';
   const prof = genreProfile();
-  const me = discKind !== 'film' && prof.size ? `<label class="chk" style="margin:0 2px 10px"><input type="checkbox" id="discMe" ${discForMe ? 'checked' : ''}> ✨ Csak a nekem valók (${[...prof].map(g => GENRE_HU[g] || g).join(', ')})</label>` : '';
+  const me = prof.size ? `<label class="chk" style="margin:0 2px 10px"><input type="checkbox" id="discMe" ${discForMe ? 'checked' : ''}> ✨ Csak a nekem valók (${[...prof].map(g => GENRE_HU[g] || g).join(', ')})</label>` : '';
   return seg + me + `<input type="search" id="discQ" placeholder="Keresés a közelgők között…" value="${esc(discQuery)}" autocomplete="off" style="margin-bottom:8px">
     <div id="discList">${discListHtml()}</div>`;
 }
@@ -1539,7 +1542,7 @@ function discListHtml(){
   const q = norm(discQuery), words = q.split(' ').filter(Boolean);
   const match = it => !words.length || (n => words.every(w => n.includes(w)))(norm([discName(it), it.f ? it.f.orig : it.x.name].join(' ')));
   const prof = genreProfile();
-  const all = discItems(words.length ? '' : discKind).filter(match).filter(it => !discForMe || it.f || forMe(it, prof)), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
+  const all = discItems(words.length ? '' : discKind).filter(match).filter(it => !discForMe || forMe(it, prof)), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
   const hiddenHtml = hidden.length ? `<button class="btn block" data-act="discShowHidden">${showHiddenDisc ? 'Elrejtettek bezárása' : `Elrejtettek (${hidden.length})`}</button>` +
     (showHiddenDisc ? hidden.map(it => { const n = discName(it);
       return `<div class="card" style="margin-top:8px"><div class="body"><div class="name">${esc(n)}</div></div><button class="btn" data-act="discUnhide" data-key="${esc(discKey(it))}">Visszahoz</button></div>`; }).join('') : '') : '';
@@ -1563,7 +1566,8 @@ function discListHtml(){
 function discView(it){
   if (it.f) { const f = it.f;
     return {name: f.name, img: f.image, orig: f.orig && f.orig !== f.name ? f.orig : '', have: state.shows.some(sh => sh.qid === f.qid),
-      short: f.huRelease ? 'Magyar mozi' : 'Mozifilm', sub: [f.huRelease ? 'Magyar mozibemutató' : 'Premier külföldön', f.desc].filter(Boolean).join(' · '),
+      short: [f.huRelease ? 'Magyar mozi' : 'Mozifilm', genresHu(f.genres)[0]].filter(Boolean).join(' · '),
+      sub: [f.huRelease ? 'Magyar mozibemutató' : 'Premier külföldön', genresHu(f.genres).join(', '), f.desc].filter(Boolean).join(' · '),
       act: `data-act="discAdd" data-qid="${esc(f.qid)}"`, tmp: {kind: 'film', name: f.name, meta: {tmdbId: f.tmdbId, imdb: f.imdb}}}; }
   const x = it.x;
   return {name: x.huName || x.name, img: x.image, orig: x.huName ? x.name : '', have: state.shows.some(sh => sh.tvmazeId === x.id),
@@ -1598,7 +1602,7 @@ async function discAdd(el){
     const f = (upc.films || []).find(x => x.qid === el.dataset.qid);
     if (!f || state.shows.some(sh => sh.qid === f.qid)) return;
     state.shows.push({id:uid(), kind:'film', qid:f.qid, tvmazeId:null, name:f.name, image:f.image,
-      meta:{orig:f.orig, desc:f.desc, release:ymdTime(f.release), prec:f.prec, huRelease:f.huRelease ? ymdTime(f.huRelease) : null},
+      meta:{orig:f.orig, desc:f.desc, genres:f.genres || [], tmdbId:f.tmdbId, imdb:f.imdb, release:ymdTime(f.release), prec:f.prec, huRelease:f.huRelease ? ymdTime(f.huRelease) : null},
       status:'tervezem', lastSeason:0, lastEpisode:0, notes:'', manualNext:null, added:now(), seenAt:null, cache:{fetchedAt:0}});
     save(); render(); toast(`${f.name} → Tervezem`);
     return;
