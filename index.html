@@ -88,11 +88,15 @@ nav.tabs .dot{position:absolute;top:-2px;left:calc(50% + 8px);background:var(--a
 
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;display:none;align-items:flex-end;justify-content:center}
 .sheet-bg.open{display:flex}
-.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92vh;border-radius:20px 20px 0 0;
-  overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 16px calc(var(--safe-b) + 20px);animation:up .22s ease}
+/* a lap ne érjen fel az iPhone állapotsorába (ott az iOS elmossa a tartalmat) */
+.sheet{background:var(--bg);width:100%;max-width:640px;border-radius:20px 20px 0 0;
+  max-height:calc(100vh - var(--safe-t) - 16px);max-height:calc(100dvh - var(--safe-t) - 16px);
+  overflow:auto;-webkit-overflow-scrolling:touch;padding:0 16px calc(var(--safe-b) + 20px);animation:up .22s ease}
 @keyframes up{from{transform:translateY(40px);opacity:.4}}
-.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
-.sheet-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 0}
+/* a fejléc (Kész gomb) görgetéskor is látszik */
+.sheet-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;position:sticky;top:0;z-index:2;
+  background:var(--bg);padding:10px 0}
 .sheet-head h2{flex:1;margin:0;font-size:20px}
 .field{background:var(--surface);border-radius:14px;padding:12px;margin-bottom:10px}
 .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600}
