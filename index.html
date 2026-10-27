@@ -175,7 +175,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '16';
+const APP_VER = '17';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -967,7 +967,7 @@ function renderBeall(){
     <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>`}</div>
   <div class="section-title">Hol nézhető? (TMDB)</div>
   <div class="field">${tmdbKey() ? `<div class="small">TMDB-kulcs: <b style="color:var(--ok)">beállítva</b>. A sorozatok és filmek adatlapján látod, melyik szolgáltatón nézhetők Magyarországon, és a magyar leírást.</div>
-    <button class="btn block" data-act="tmdbReset">Kulcs törlése</button>` : `<div class="small muted">Add meg az ingyenes TMDB API-kulcsodat (themoviedb.org → Beállítások → API), és az adatlapokon megjelenik, hol nézhető a sorozat vagy film Magyarországon (Netflix, Max, Disney+…), plusz a magyar leírás.</div>
+    ${lsGet('nezonaplo.tmdb') ? '<button class="btn block" data-act="tmdbReset">Saját kulcs törlése</button>' : ''}` : `<div class="small muted">Add meg az ingyenes TMDB API-kulcsodat (themoviedb.org → Beállítások → API), és az adatlapokon megjelenik, hol nézhető a sorozat vagy film Magyarországon (Netflix, Max, Disney+…), plusz a magyar leírás.</div>
     <input type="text" id="tmdbIn" placeholder="API-kulcs vagy olvasási token" autocomplete="off" autocapitalize="off" autocorrect="off" style="margin-top:8px">
     <button class="btn block primary" data-act="tmdbSave">Mentés</button>`}</div>
   <div class="section-title">Megnézett filmek (${seenFilms.length})</div>
@@ -1246,7 +1246,9 @@ function renderFilmDetail(sh){
 
 /* ---------- TMDB: hol nézhető Magyarországon (JustWatch adatai) + magyar leírás ---------- */
 const TMDB = 'https://api.themoviedb.org/3';
-const tmdbKey = () => lsGet('nezonaplo.tmdb') || '';
+// csak olvasási TMDB API-kulcs (a Beállításokban felülírható)
+const TMDB_DEFAULT = '3a59373cb0306b9701118f8cfc3b6644';
+const tmdbKey = () => lsGet('nezonaplo.tmdb') || TMDB_DEFAULT;
 async function tmdbGet(path, params){
   const k = tmdbKey(), jwt = k.startsWith('eyJ');
   const q = new URLSearchParams(Object.assign({}, params || {}, jwt ? {} : {api_key: k}));
