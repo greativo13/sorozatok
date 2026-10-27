@@ -161,7 +161,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '13';
+const APP_VER = '14';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -400,6 +400,8 @@ async function refreshAll(force){
    működik); a kapott kulcs 1 óráig érvényes, utána egy koppintással újat kérünk. */
 const YT_CLIENT_DEFAULT = '419629109428-kv7ohj8go85u8926atkus79tolmgo8jt.apps.googleusercontent.com';
 const YT_KEY = 'nezonaplo.yt';
+// írási jog kell, hogy a "Később megnézem" videók a YouTube-on is egy lejátszási listába kerüljenek
+const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';
 const ytClient = () => lsGet('nezonaplo.ytClient') || YT_CLIENT_DEFAULT;
 let yt = (() => { try { return JSON.parse(localStorage.getItem(YT_KEY)) || null; } catch(e) { return null; } })()
   || {channels:[], videos:[], seen:{}, hidden:{}, fetchedAt:0};
@@ -407,12 +409,13 @@ yt.later = yt.later || {}; yt.nope = yt.nope || {}; // nope: "Nem érdekel" vide
 let showNope = false;
 let ytBusy = false, ytChan = '';
 const ytSave = () => { try { localStorage.setItem(YT_KEY, JSON.stringify(yt)); } catch(e) { toast('Nem sikerült menteni a YouTube adatokat'); } };
+function ytCanWrite(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return !!(t && (t.scope || '').split(' ').includes(YT_SCOPE)); } catch(e) { return false; } }
 function ytToken(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return t && t.exp > now() + 60e3 ? t.t : null; } catch(e) { return null; } }
 function ytLogin(silent){
   if (!ytClient()) { toast('Előbb add meg a Google Client ID-t'); return; }
   const st = uid(); lsSet('nezonaplo.ytState', st); lsSet('nezonaplo.ytSilent', silent ? '1' : '');
   const p = new URLSearchParams({client_id: ytClient(), redirect_uri: location.origin + location.pathname, response_type: 'token',
-    scope: 'https://www.googleapis.com/auth/youtube.readonly', state: st, include_granted_scopes: 'true'});
+    scope: YT_SCOPE, state: st, include_granted_scopes: 'true'});
   if (silent) p.set('prompt', 'none');
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + p;
 }
@@ -424,18 +427,91 @@ function ytHandleRedirect(){
   const okState = h.get('state') && h.get('state') === lsGet('nezonaplo.ytState');
   tab = 'youtube'; lsSet('sorozatmemoria.tab', tab);
   if (h.get('access_token') && okState) {
-    lsSet('nezonaplo.ytTok', JSON.stringify({t: h.get('access_token'), exp: now() + (parseInt(h.get('expires_in')) || 3600) * 1000}));
+    lsSet('nezonaplo.ytTok', JSON.stringify({t: h.get('access_token'), exp: now() + (parseInt(h.get('expires_in')) || 3600) * 1000, scope: h.get('scope') || ''}));
     return true;
   }
   if (h.get('error') && lsGet('nezonaplo.ytSilent') === '1') { ytLogin(false); return false; } // csendes próbálkozás nem ment → rendes bejelentkezés
   if (h.get('error')) setTimeout(() => toast('Google-bejelentkezés megszakítva'), 300);
   return false;
 }
-async function ytApi(path, params){
-  const r = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams(params)}`, {headers: {Authorization: 'Bearer ' + ytToken()}});
+async function ytApi(path, params, opts){
+  opts = opts || {};
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams(params)}`, {method: opts.method || 'GET',
+    headers: Object.assign({Authorization: 'Bearer ' + ytToken()}, opts.body ? {'Content-Type': 'application/json'} : {}),
+    body: opts.body ? JSON.stringify(opts.body) : undefined});
   if (r.status === 401) { lsSet('nezonaplo.ytTok', ''); throw new Error('auth'); }
   if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
-  return r.json();
+  return r.status === 204 ? null : r.json();
+}
+
+/* ---------- "Később megnézem" = egy YouTube lejátszási lista (yt.pl) ---------- */
+const plReady = () => yt.pl && ytToken() && ytCanWrite();
+async function plInsert(e){
+  const j = await ytApi('playlistItems', {part: 'snippet'}, {method: 'POST',
+    body: {snippet: {playlistId: yt.pl.id, resourceId: {kind: 'youtube#video', videoId: e.id}}}});
+  e.pli = j.id; delete e.pending;
+}
+async function ytAddLater(v){
+  const c = yt.channels.find(c => c.id === v.ch);
+  const e = Object.assign({}, v, {savedAt: now(), chTitle: c ? c.title : v.chTitle}); delete e.extra;
+  if (yt.pl) e.pending = 1;
+  yt.later[v.id] = e; ytSave(); render();
+  if (!yt.pl) { toast('Később megnézem listára téve'); return; }
+  if (!plReady()) { toast('Listára téve – a YouTube-ra a következő frissítéskor kerül fel'); return; }
+  try { await plInsert(e); ytSave(); toast(`Hozzáadva: ${yt.pl.title} (YouTube)`); }
+  catch(err) { toast('Listára téve – a YouTube-ra a következő frissítéskor kerül fel'); }
+}
+async function ytRemoveLater(id){
+  const e = yt.later[id]; if (!e) return;
+  delete yt.later[id]; ytSave(); render(); toast('Levéve a listáról');
+  if (!yt.pl || !e.pli) return;
+  try { if (!plReady()) throw new Error('later'); await ytApi('playlistItems', {id: e.pli}, {method: 'DELETE'}); }
+  catch(err) { yt.plDel = (yt.plDel || []).concat(e.pli); ytSave(); }
+}
+// frissítéskor: függő változások feltöltése, majd a lista letöltése a YouTube-ról
+async function plSync(){
+  if (!plReady()) return;
+  for (const pli of (yt.plDel || []).slice()) {
+    try { await ytApi('playlistItems', {id: pli}, {method: 'DELETE'}); } catch(e) { if (e.message === 'auth') throw e; }
+    yt.plDel = yt.plDel.filter(x => x !== pli);
+  }
+  for (const e of Object.values(yt.later)) if (e.pending) { try { await plInsert(e); } catch(err) { if (err.message === 'auth') throw err; } }
+  const later = {}; let page = '', n = 0;
+  do {
+    const j = await ytApi('playlistItems', Object.assign({part: 'snippet,contentDetails', playlistId: yt.pl.id, maxResults: '50'}, page ? {pageToken: page} : {}));
+    for (const it of j.items || []) {
+      const sn = it.snippet || {}, vid = (it.contentDetails || {}).videoId || (sn.resourceId || {}).videoId;
+      if (!vid || /^(Private|Deleted) video$/.test(sn.title)) continue;
+      const old = yt.later[vid] || {};
+      later[vid] = {id: vid, pli: it.id, title: sn.title, ch: sn.videoOwnerChannelId || old.ch, chTitle: sn.videoOwnerChannelTitle || old.chTitle || '',
+        pub: Date.parse((it.contentDetails || {}).videoPublishedAt || sn.publishedAt), savedAt: Date.parse(sn.publishedAt),
+        thumb: ((sn.thumbnails || {}).medium || (sn.thumbnails || {}).default || {}).url || null, extra: old.extra};
+    }
+    page = j.nextPageToken || ''; n++;
+  } while (page && n < 10);
+  for (const e of Object.values(yt.later)) if (e.pending && !later[e.id]) later[e.id] = e; // ami még nem ment fel
+  yt.later = later;
+}
+let plChoices = null;
+async function plLoadChoices(){
+  try {
+    const j = await ytApi('playlists', {part: 'snippet', mine: 'true', maxResults: '50'});
+    plChoices = (j.items || []).map(p => ({id: p.id, title: p.snippet.title}));
+  } catch(e) { if (e.message === 'auth') { ytLogin(true); return; } toast('Nem sikerült betölteni a listáidat'); plChoices = null; }
+  render();
+}
+async function plChoose(id, title){
+  try {
+    if (!id) {
+      const j = await ytApi('playlists', {part: 'snippet,status'}, {method: 'POST',
+        body: {snippet: {title: 'Megnézendő (Nézőnapló)', description: 'A Nézőnapló "Később megnézem" listája'}, status: {privacyStatus: 'private'}}});
+      id = j.id; title = j.snippet.title;
+    }
+    yt.pl = {id, title}; plChoices = null;
+    for (const e of Object.values(yt.later)) if (!e.pli) e.pending = 1; // a már meglévők is felkerülnek
+    ytSave(); render(); toast(`Lista beállítva: ${title}`);
+    ytRefresh(false);
+  } catch(e) { if (e.message === 'auth') ytLogin(true); else toast('Nem sikerült: ' + e.message); }
 }
 async function ytRefresh(byUser){
   if (ytBusy) return;
@@ -443,6 +519,12 @@ async function ytRefresh(byUser){
   if (!navigator.onLine) { if (byUser) toast('Nincs internet'); return; }
   ytBusy = true; render(); $('#refreshBtn').classList.add('spin');
   try {
+    try { await plSync(); }
+    catch(e) {
+      if (e.message === 'auth') throw e;
+      if (e.status === 404) { yt.pl = null; toast('A YouTube lista már nem létezik – válassz újat'); }
+      else toast('A YouTube lista szinkronizálása most nem sikerült');
+    }
     const channels = []; let page = '';
     do {
       const j = await ytApi('subscriptions', Object.assign({part: 'snippet', mine: 'true', maxResults: '50', order: 'alphabetical'}, page ? {pageToken: page} : {}));
@@ -521,6 +603,20 @@ function renderYtDetail(){
     }).catch(() => { v.extra = null; if (sheetState && sheetState.vid === v.id) renderYtDetail(); });
   }
 }
+function plCardHtml(){
+  if (yt.pl && !plChoices) return '';
+  const back = yt.pl ? '<button class="btn block" data-act="plCancel">Mégse</button>' : '';
+  if (!ytCanWrite()) return `<div class="field"><b>Megnézendő lista a YouTube-on</b>
+    <div class="small muted" style="margin:6px 0 4px">Ha engedélyezed, az <b>Érdekel</b> gombbal jelölt videók a YouTube-on is egy lejátszási listába kerülnek, és amit a YouTube-on teszel abba a listába, az itt is megjelenik. Ehhez egyszer újra be kell jelentkezned.</div>
+    <button class="btn block primary" data-act="ytLogin">Engedély megadása</button></div>`;
+  if (!plChoices) return `<div class="field"><b>Megnézendő lista a YouTube-on</b>
+    <div class="small muted" style="margin:6px 0 4px">Válaszd ki, melyik lejátszási listával szinkronizáljon a „Később megnézem”.</div>
+    <button class="btn block primary" data-act="plLoad">Lista kiválasztása</button></div>`;
+  return `<div class="field"><b>Melyik lista legyen?</b>
+    <button class="btn block primary" data-act="plChoose" data-id="">＋ Új lista: „Megnézendő (Nézőnapló)”</button>
+    ${plChoices.map(p => `<button class="btn block" data-act="plChoose" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${esc(p.title)}</button>`).join('')}
+    <div class="small muted" style="margin-top:8px">A YouTube saját „Megnézendő” (Watch later) listáját a Google nem engedi elérni, ezért kell külön lista.</div>${back}</div>`;
+}
 function renderYoutube(){
   if (!ytClient()) return `
     <div class="field"><b>YouTube bekötése</b>
@@ -549,13 +645,15 @@ function renderYoutube(){
   return `
     <div class="small muted" style="margin:2px 4px 10px">${yt.channels.length} feliratkozás · frissítve: ${ytAgo(yt.fetchedAt)}${ytToken() ? '' : ' · frissítéshez koppints a ⟳ gombra'}</div>
     <select id="ytChanSel" style="margin-bottom:12px"><option value="">Minden csatorna</option>${opts}</select>
-    ${later.length ? `<div class="section-title">Később megnézem (${later.length})</div>${later.map(row).join('')}` : ''}
+    ${plCardHtml()}
+    ${later.length ? `<div class="section-title">${yt.pl ? 'Később megnézem · ' + esc(yt.pl.title) : 'Később megnézem'} (${later.length})</div>${later.map(row).join('')}` : ''}
     <div class="section-title" style="display:flex;align-items:center">Új videók (${fresh.length})
       ${fresh.length ? '<button class="btn" style="margin-left:auto;text-transform:none;letter-spacing:0" data-act="ytAllSeen">Mind láttam</button>' : ''}</div>
     ${fresh.length ? fresh.map(row).join('') : '<div class="small muted" style="padding:0 4px 6px">Nincs új videó.</div>'}
     <div class="section-title">Korábbiak (utolsó 30 nap)</div>
     ${old.length ? old.map(row).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}
     ${nopeList.length ? `<button class="btn block" data-act="ytShowNope">${showNope ? 'Elrejtett videók bezárása' : `Elrejtett videók (${nopeList.length})`}</button>${showNope ? nopeList.map(row).join('') : ''}` : ''}
+    ${yt.pl ? `<button class="btn block" data-act="plLoad">YouTube lista módosítása (most: ${esc(yt.pl.title)})</button>` : ''}
     <div class="section-title">Csatornák (${yt.channels.length})</div>
     <div class="small muted" style="padding:0 4px 8px">Az elrejtett csatornák videói nem jelennek meg.</div>
     ${yt.channels.map(c => `<div class="yt-ch">${c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
@@ -1251,22 +1349,21 @@ document.addEventListener('click', e => {
     case 'ytDetail': openSheet({type:'yt', vid: el.dataset.vid}); break;
     case 'ytNope': { const id = el.dataset.vid; if (yt.nope[id]) delete yt.nope[id]; else { yt.nope[id] = 1; toast('Elrejtve'); }
       ytSave(); render(); if (sheetState && sheetState.type === 'yt') closeSheet(); break; }
-    case 'ytWant': { const id = el.dataset.vid, v = ytFind(id); if (!v) break;
-      const c = yt.channels.find(c => c.id === v.ch);
-      yt.later[id] = Object.assign({}, v, {savedAt: now(), chTitle: c ? c.title : v.chTitle}); yt.seen[id] = 1;
-      ytSave(); render(); toast('Később megnézem listára téve'); break; }
+    case 'ytWant': { const v = ytFind(el.dataset.vid); if (!v) break; yt.seen[v.id] = 1; ytAddLater(v); break; }
+    case 'plLoad': if (!ytToken()) { ytLogin(true); break; } plLoadChoices(); break;
+    case 'plChoose': plChoose(el.dataset.id, el.dataset.title); break;
+    case 'plCancel': plChoices = null; render(); break;
     case 'ytShowNope': showNope = !showNope; render(); break;
     case 'ytSeenToggle': { const id = el.dataset.vid; if (yt.seen[id]) delete yt.seen[id]; else yt.seen[id] = 1; ytSave(); render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
-    case 'ytLater': { const id = el.dataset.vid, v = ytFind(id); yt.later = yt.later || {};
-      if (yt.later[id]) { delete yt.later[id]; toast('Levéve a listáról'); }
-      else if (v) { const c = yt.channels.find(c => c.id === v.ch); yt.later[id] = Object.assign({}, v, {savedAt: now(), chTitle: c ? c.title : v.chTitle}); toast('Később megnézem listára téve'); }
-      ytSave(); render(); if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
+    case 'ytLater': { const id = el.dataset.vid, v = ytFind(id);
+      (yt.later[id] ? ytRemoveLater(id) : v ? ytAddLater(v) : Promise.resolve()).then(() => { if (sheetState && sheetState.type === 'yt') renderYtDetail(); });
+      if (sheetState && sheetState.type === 'yt') renderYtDetail(); break; }
     case 'ytAllSeen': ytVisible().filter(v => !ytChan || v.ch === ytChan).forEach(v => { yt.seen[v.id] = 1; }); ytSave(); render(); break;
     case 'ytHide': { const c = el.dataset.ch; if (yt.hidden[c]) delete yt.hidden[c]; else yt.hidden[c] = 1; ytSave(); render();
       if (!yt.hidden[c] && ytToken()) ytRefresh(false); break; }
     case 'ytLogout': if (confirm('Leválasztod a YouTube-ot? A letöltött lista törlődik.')) {
       const tok = ytToken(); if (tok) fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(tok), {method: 'POST'}).catch(() => {});
-      lsSet('nezonaplo.ytTok', ''); yt = {channels:[], videos:[], seen:{}, hidden:{}, later:{}, fetchedAt:0}; ytSave(); render(); } break;
+      lsSet('nezonaplo.ytTok', ''); yt = {channels:[], videos:[], seen:{}, hidden:{}, later:{}, nope:{}, fetchedAt:0}; ytSave(); render(); } break;
     case 'kozView': kozView = el.dataset.v; lsSet('nezonaplo.kozView', kozView); render(); window.scrollTo(0,0); break;
     case 'discKind': discKind = el.dataset.v; lsSet('nezonaplo.discKind', discKind); render(); window.scrollTo(0,0); break;
     case 'discAdd': e.stopPropagation(); discAdd(el); break;
