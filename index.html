@@ -227,7 +227,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '20';
+const APP_VER = '21';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -926,11 +926,11 @@ function seasonProgress(sh){
   const inS = all.filter(e => e.s === s); if (inS.length < 2) return null;
   return {s, total: inS.length, done: inS.filter(e => !after(e, sh.lastSeason, sh.lastEpisode)).length};
 }
-// "Ma jön" sáv: ami ma/holnap jön a listáidból
+// "Ma jön" sáv: ami ma jön a listáidból
 function todayStrip(){
-  const its = upcomingItems().items.filter(it => dayDiff(it.d) <= 1);
+  const its = upcomingItems().items.filter(it => dayDiff(it.d) === 0);
   if (!its.length) return '';
-  return `<div class="section-title" style="margin-top:4px">Ma és holnap</div><div class="strip">${its.map(it => {
+  return `<div class="section-title" style="margin-top:4px">Ma jön</div><div class="strip">${its.map(it => {
     const d = new Date(it.d), t = it.key.endsWith('m') ? '' : ' ' + new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(d);
     return `<div class="strip-it" data-act="open" data-id="${it.sh.id}">${posterHtml(it.sh)}<div class="when">${rel(it.d)}${t}</div>
       <div class="nm">${esc(it.sh.name)}</div><div class="lb">${esc(it.label)}</div></div>`; }).join('')}</div>`;
