@@ -251,7 +251,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '29';
+const APP_VER = '30';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -270,7 +270,7 @@ let refreshing = false;
 let sheetState = null; // {type:'search'|'detail'|'manual', id?}
 let searchKind = lsGet('sorozatmemoria.kind') || 'sorozat';
 let tervFilter = 'mind';
-let kozView = lsGet('nezonaplo.kozView') || 'sajat', discKind = lsGet('nezonaplo.discKind') || 'uj';
+let kozView = (lsGet('nezonaplo.kozView') === 'felfedez' ? 'felfedez' : 'sajat'), discKind = lsGet('nezonaplo.discKind') || 'uj';
 
 /* ---------- tárolás ---------- */
 function load(){
@@ -1109,11 +1109,10 @@ function upcomingItems(){
   items.sort((a, b) => a.d - b.d);
   return {items, noDate};
 }
-const kozSeg = () => `<div class="seg" style="margin:4px 0 12px">${[['sajat','Saját listám'],['felfedez','Felfedezés'],['tv','Ma a tévében']].map(([v, l]) =>
+const kozSeg = () => `<div class="seg" style="margin:4px 0 12px">${[['sajat','Saját listám'],['felfedez','Felfedezés']].map(([v, l]) =>
   `<button data-act="kozView" data-v="${v}" class="${kozView === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 function renderKozelgo(){
   if (kozView === 'felfedez') return kozSeg() + renderDiscover();
-  if (kozView === 'tv') return kozSeg() + renderTvToday();
   return kozSeg() + renderSajat();
 }
 function renderSajat(){
@@ -1761,33 +1760,6 @@ async function recAdd(k, status){
   } catch(e) { toast('Nem sikerült hozzáadni'); }
 }
 
-/* ---------- Ma a magyar tévében (TVmaze műsor, ország: HU) ---------- */
-let tvDay = 0; const tvCache = {};
-function renderTvToday(){
-  const d = new Date(); d.setDate(d.getDate() + tvDay);
-  const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const seg = `<div class="chiprow">${[[0,'Ma'],[1,'Holnap'],[2,'Holnapután']].map(([v, l]) => `<button class="pchip ${tvDay === v ? 'on' : ''}" data-act="tvDay" data-v="${v}">${l}</button>`).join('')}</div>`;
-  const c = tvCache[ymd];
-  if (!c) { tvCache[ymd] = 'loading';
-    Promise.all([fetch(`${API}/schedule?country=HU&date=${ymd}`).then(r => r.json()), fetch(`${API}/schedule/web?country=HU&date=${ymd}`).then(r => r.json()).catch(() => [])])
-      .then(([a, b]) => { tvCache[ymd] = [...a, ...b.map(x => Object.assign({}, x, {show: x._embedded && x._embedded.show}))].filter(x => x.show)
-        .sort((x, y) => (x.airstamp || '').localeCompare(y.airstamp || '')); if (tab === 'kozelgo' && kozView === 'tv') render(); })
-      .catch(() => { delete tvCache[ymd]; if (tab === 'kozelgo' && kozView === 'tv') render(); });
-    return seg + '<div class="muted small" style="padding:8px">Betöltés…</div>'; }
-  if (c === 'loading') return seg + '<div class="muted small" style="padding:8px">Betöltés…</div>';
-  if (!c.length) return seg + '<div class="empty">Erre a napra nincs adat a magyar csatornákról.</div>';
-  return seg + c.map(x => {
-    const sh = x.show, have = state.shows.find(o => o.tvmazeId === sh.id), t = x.airstamp ? new Date(x.airstamp) : null;
-    const ch = (sh.network || sh.webChannel || {}).name || '';
-    return `<div class="day-row">
-      <div class="date-chip"><div class="d" style="font-size:16px">${t ? new Intl.DateTimeFormat('hu-HU', {hour: '2-digit', minute: '2-digit'}).format(t) : '–'}</div><div class="w">${esc(ch)}</div></div>
-      ${posterHtml({image: sh.image ? sh.image.medium : null, name: sh.name}, 'poster disc-poster')}
-      <div class="body" style="flex:1;min-width:0"><div style="font-weight:700;line-height:1.25">${esc(have ? have.name : sh.name)}</div>
-        <div class="sub muted small">${x.season ? code(x.season, x.number || 0) : ''}${x.name && !/^\d+\. rész$/.test(x.name) ? ' · ' + esc(x.name) : ''}</div></div>
-      ${have ? '<span class="small muted" style="flex:none">✓ Listán</span>' : `<button class="btn primary" style="flex:none" data-act="tvAdd" data-tid="${sh.id}" data-ymd="${ymd}">Nézem</button>`}</div>`;
-  }).join('') + '<div class="small muted" style="padding:10px 4px">Forrás: TVmaze. A magyar csatornák közül csak a nagyobb műsorok szerepelnek benne.</div>';
-}
-
 /* ---------- részek listája (pipálás, spoilermentes leírás) ---------- */
 let epsSeason = 0, epsReveal = {};
 const epsInfo = {}, tmdbSeasons = {};
@@ -2293,8 +2265,6 @@ document.addEventListener('click', e => {
     case 'rateSkip': sh.seasonRatings = sh.seasonRatings || {}; sh.seasonRatings[sh.rateSeason] = 0; delete sh.rateSeason; save(); render(); break;
     case 'nameReset': nameReset(sh); break;
     case 'theme': lsSet('nezonaplo.theme', el.dataset.v); if (el.dataset.v) document.documentElement.dataset.theme = el.dataset.v; else delete document.documentElement.dataset.theme; render(); break;
-    case 'tvDay': tvDay = +el.dataset.v; render(); break;
-    case 'tvAdd': { const x = (tvCache[el.dataset.ymd] || []).find(i => i.show.id === +el.dataset.tid); if (x) addShowObj(x.show, 'nezem'); break; }
     case 'epsOpen': epsSeason = 0; openSheet({type: 'eps', id}); break;
     case 'epsBack': openSheet({type: 'detail', id}); break;
     case 'epsSeason': epsSeason = +el.dataset.v; renderEps(); break;
