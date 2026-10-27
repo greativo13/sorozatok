@@ -132,6 +132,20 @@ textarea{min-height:70px;resize:vertical}
 .yt-ch{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:12px;padding:6px 8px;margin-bottom:6px}
 .yt-ch img,.yt-ch .yt-ph{width:32px;height:32px;border-radius:50%;flex:none;background:var(--surface2)}
 .disc-poster{width:46px;height:66px;font-size:18px}
+.wk{display:flex;gap:4px}
+.wk button{flex:1;padding:8px 0;border-radius:8px;background:var(--surface2);font-size:13px;font-weight:700;color:var(--muted)}
+.wk button.on{background:var(--accent);color:#fff}
+.chk{display:flex!important;gap:8px;align-items:center;margin-top:10px;font-size:14px!important;color:var(--text)!important;font-weight:500!important}
+.stars{display:flex;gap:6px}
+.stars button{font-size:30px;line-height:1;color:var(--line)}
+.stars button.on{color:var(--warn)}
+.stat-row{display:flex;text-align:center}
+.stat-row>div{flex:1}
+.stat-row b{display:block;font-size:26px}
+.stat-row span{font-size:12px;color:var(--muted)}
+.provs{display:flex;flex-wrap:wrap;gap:6px}
+.prov{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border-radius:10px;padding:4px 10px 4px 4px;font-size:13px;font-weight:600}
+.prov img{width:26px;height:26px;border-radius:6px}
 .cover-btn{position:relative;flex:none}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
   display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
@@ -161,7 +175,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '15';
+const APP_VER = '16';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -246,6 +260,22 @@ function manualFuture(sh){
   const t = Date.parse(sh.manualNext.date + 'T12:00:00');
   return dayDiff(t) >= 0 ? t : null;
 }
+// Saját heti adásrend (pl. szombat 20:00), ha a TVmaze-dátum hiányzik vagy hibás
+const WD_HU = [['H',1],['K',2],['Sze',3],['Cs',4],['P',5],['Szo',6],['V',0]];
+const schedOn = sh => !!(sh.sched && sh.sched.days && sh.sched.days.length);
+function schedNext(sh){
+  const [hh, mm] = (sh.sched.time || '20:00').split(':').map(Number), t = now();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(); d.setDate(d.getDate() + i); d.setHours(hh || 0, mm || 0, 0, 0);
+    if (sh.sched.days.includes(d.getDay()) && d.getTime() > t) return d.getTime();
+  }
+  return null;
+}
+function schedLabel(sh){
+  const t = now(), aired = eps(sh).filter(e => e.d && e.d <= t);
+  const last = aired[aired.length - 1];
+  return last ? code(last.s, last.n + 1) + ' · várható' : 'Következő rész · várható';
+}
 function nextInfo(sh){
   // legkorábbi közelgő esemény (API vagy kézi)
   if (isFilm(sh)) {
@@ -255,11 +285,32 @@ function nextInfo(sh){
     if (m) return {d: m, label: sh.manualNext.label || 'Kézi emlékeztető', manual: true, film: true};
     return null;
   }
-  const f = futureEps(sh)[0];
+  let f = futureEps(sh)[0];
   const m = manualFuture(sh);
+  if (schedOn(sh) && (sh.sched.force || !f)) { const sd = schedNext(sh); if (sd) f = {d: sd, sched: true}; }
+  if (f && f.sched && (!m || f.d <= m)) return {d:f.d, label:schedLabel(sh), sched:true};
   if (f && (!m || f.d <= m)) return {d:f.d, label:code(f.s,f.n), premiere:f.n === 1, ep:f};
   if (m) return {d:m, label:sh.manualNext.label || 'Kézi emlékeztető', premiere:/évad|season/i.test(sh.manualNext.label||''), manual:true};
   return null;
+}
+// hány részt lépett előre (visszalépésnél negatív) – a statisztikához
+function epDelta(sh, s1, n1, s2, n2){
+  const list = eps(sh);
+  if (list.length) {
+    const fwd = list.filter(e => after(e, s1, n1) && !after(e, s2, n2)).length;
+    return fwd || -list.filter(e => after(e, s2, n2) && !after(e, s1, n1)).length;
+  }
+  if (s2 === s1) return n2 - n1;
+  return s2 > s1 ? n2 : 0;
+}
+function setProgress(sh, s, n){
+  const k = epDelta(sh, sh.lastSeason, sh.lastEpisode, s, n);
+  sh.lastSeason = s; sh.lastEpisode = n;
+  if (!k) return;
+  const y = new Date().getFullYear();
+  state.stats = state.stats || {}; if (!state.statsSince) state.statsSince = now();
+  const st = state.stats[y] = state.stats[y] || {eps: 0, shows: {}};
+  st.eps = Math.max(0, st.eps + k); st.shows[sh.id] = Math.max(0, (st.shows[sh.id] || 0) + k);
 }
 function recentPremiere(sh){
   // új évad első része, ami az elmúlt 21 napban jött ki és még nem láttad
@@ -298,7 +349,9 @@ function parseFilm(x){
       orig: lbl('en'),
       desc: (x.descriptions && (x.descriptions.hu || x.descriptions.en) || {}).value || '',
       release: first ? first.d : null, prec: first ? first.prec : null,
-      huRelease: hu ? hu.d : null
+      huRelease: hu ? hu.d : null,
+      tmdbId: ((((c.P4947 || [])[0] || {}).mainsnak || {}).datavalue || {}).value || null,
+      imdb: ((((c.P345 || [])[0] || {}).mainsnak || {}).datavalue || {}).value || null
     }
   };
 }
@@ -353,6 +406,7 @@ async function fetchShow(sh){
   const s = slimShow(j);
   if (!sh.customImage) sh.image = s.image || sh.image; sh.meta = s.meta; if (!sh.customName) sh.name = j.name || sh.name;
   sh.cache = {episodes: slimEpisodes(j._embedded && j._embedded.episodes), fetchedAt: now()};
+  if (j.externals) sh.ext = {imdb: j.externals.imdb || null, tvdb: j.externals.thetvdb || null};
   state.lastRefresh = now();
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -403,6 +457,8 @@ const YT_CLIENT_DEFAULT = '419629109428-kv7ohj8go85u8926atkus79tolmgo8jt.apps.go
 const YT_KEY = 'nezonaplo.yt';
 // írási jog kell, hogy a "Később megnézem" videók a YouTube-on is egy lejátszási listába kerüljenek
 const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';
+// Drive: csak az app által létrehozott fájlokhoz fér hozzá (a mentéshez)
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const ytClient = () => lsGet('nezonaplo.ytClient') || YT_CLIENT_DEFAULT;
 let yt = (() => { try { return JSON.parse(localStorage.getItem(YT_KEY)) || null; } catch(e) { return null; } })()
   || {channels:[], videos:[], seen:{}, hidden:{}, fetchedAt:0};
@@ -411,12 +467,14 @@ let showNope = false;
 let ytBusy = false, ytChan = '';
 const ytSave = () => { try { localStorage.setItem(YT_KEY, JSON.stringify(yt)); } catch(e) { toast('Nem sikerült menteni a YouTube adatokat'); } };
 function ytCanWrite(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return !!(t && (t.scope || '').split(' ').includes(YT_SCOPE)); } catch(e) { return false; } }
+function tokScopes(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return ((t && t.scope) || '').split(' '); } catch(e) { return []; } }
+const driveOk = () => tokScopes().includes(DRIVE_SCOPE);
 function ytToken(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return t && t.exp > now() + 60e3 ? t.t : null; } catch(e) { return null; } }
 function ytLogin(silent){
   if (!ytClient()) { toast('Előbb add meg a Google Client ID-t'); return; }
-  const st = uid(); lsSet('nezonaplo.ytState', st); lsSet('nezonaplo.ytSilent', silent ? '1' : '');
+  const st = uid(); lsSet('nezonaplo.ytState', st); lsSet('nezonaplo.ytSilent', silent ? '1' : ''); lsSet('nezonaplo.retTab', tab);
   const p = new URLSearchParams({client_id: ytClient(), redirect_uri: location.origin + location.pathname, response_type: 'token',
-    scope: YT_SCOPE, state: st, include_granted_scopes: 'true'});
+    scope: YT_SCOPE + (lsGet('nezonaplo.driveOn') === '1' ? ' ' + DRIVE_SCOPE : ''), state: st, include_granted_scopes: 'true'});
   if (silent) p.set('prompt', 'none');
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + p;
 }
@@ -426,7 +484,7 @@ function ytHandleRedirect(){
   const h = new URLSearchParams(location.hash.slice(1));
   history.replaceState(null, '', location.pathname + location.search);
   const okState = h.get('state') && h.get('state') === lsGet('nezonaplo.ytState');
-  tab = 'youtube'; lsSet('sorozatmemoria.tab', tab);
+  tab = lsGet('nezonaplo.retTab') || 'youtube'; if (!TITLES[tab]) tab = 'youtube'; lsSet('sorozatmemoria.tab', tab);
   if (h.get('access_token') && okState) {
     lsSet('nezonaplo.ytTok', JSON.stringify({t: h.get('access_token'), exp: now() + (parseInt(h.get('expires_in')) || 3600) * 1000, scope: h.get('scope') || ''}));
     return true;
@@ -549,6 +607,15 @@ async function ytRefresh(byUser){
       }
     };
     await Promise.all(Array.from({length: 6}, worker));
+    // videók hossza (Shorts-szűréshez és kiíráshoz); amit már tudunk, nem kérjük le újra
+    const durs = Object.assign({}, yt.durs || {}), need = videos.map(v => v.id).filter(id => !(id in durs));
+    for (let i = 0; i < need.length; i += 50) {
+      try {
+        const j = await ytApi('videos', {part: 'contentDetails', id: need.slice(i, i + 50).join(','), maxResults: '50'});
+        for (const it of j.items || []) durs[it.id] = isoSec((it.contentDetails || {}).duration);
+      } catch(e) { if (e.message === 'auth') throw e; }
+    }
+    yt.durs = {}; for (const v of videos) if (v.id in durs) yt.durs[v.id] = durs[v.id];
     const first = !yt.fetchedAt;
     yt.channels = channels;
     yt.videos = videos.sort((a, b) => b.pub - a.pub);
@@ -558,13 +625,18 @@ async function ytRefresh(byUser){
     const nope = {}; for (const id in yt.nope) if (ids.has(id)) nope[id] = 1;
     yt.seen = seen; yt.nope = nope; yt.fetchedAt = now(); ytSave();
     if (byUser) toast('YouTube frissítve');
+    setTimeout(driveAuto, 1000);
   } catch(e) {
     if (e.message === 'auth') { if (byUser) ytLogin(true); }
     else toast(e.status === 403 ? 'A YouTube nem engedte (403) – nézd meg a Google beállítást' : 'Nem sikerült frissíteni a YouTube-ot');
   }
   ytBusy = false; $('#refreshBtn').classList.remove('spin'); render();
 }
-const ytVisible = () => yt.videos.filter(v => !yt.hidden[v.ch] && !yt.nope[v.id]);
+const isoSec = iso => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || ''); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; };
+const secTxt = n => n >= 3600 ? `${Math.floor(n / 3600)}:${pad(Math.floor(n / 60) % 60)}:${pad(n % 60)}` : `${Math.floor(n / 60)}:${pad(n % 60)}`;
+// Shorts: legfeljebb 3 perces videók (a YouTube nem jelzi külön, a hossz alapján szűrünk)
+const isShort = v => { const d = (yt.durs || {})[v.id]; return d > 0 && d <= 180; };
+const ytVisible = () => yt.videos.filter(v => !yt.hidden[v.ch] && !yt.nope[v.id] && !(yt.shortsHide !== false && isShort(v)));
 const ytNewCount = () => ytVisible().filter(v => !yt.seen[v.id]).length;
 function ytAgo(t){
   const m = Math.round((now() - t) / 60e3);
@@ -633,7 +705,7 @@ function renderYoutube(){
   const fresh = list.filter(v => !yt.seen[v.id]), old = list.filter(v => yt.seen[v.id] && !yt.later[v.id]).slice(0, 80);
   const row = v => `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${esc(v.id)}">
       ${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
-      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${yt.later[v.id] && yt.seen[v.id] && v.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div></div>
+      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${(yt.durs || {})[v.id] ? ' · ' + secTxt(yt.durs[v.id]) : ''}${yt.later[v.id] && yt.seen[v.id] && v.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div></div>
       ${yt.nope[v.id] ? `<button class="btn" data-act="ytNope" data-vid="${esc(v.id)}">Visszahoz</button>` :
         !yt.seen[v.id] && !yt.later[v.id] ? `<div style="display:flex;flex-direction:column;gap:6px;flex:none">
           <button class="btn primary" data-act="ytWant" data-vid="${esc(v.id)}">Érdekel</button>
@@ -655,6 +727,7 @@ function renderYoutube(){
     ${old.length ? old.map(row).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}
     ${nopeList.length ? `<button class="btn block" data-act="ytShowNope">${showNope ? 'Elrejtett videók bezárása' : `Elrejtett videók (${nopeList.length})`}</button>${showNope ? nopeList.map(row).join('') : ''}` : ''}
     ${yt.pl ? `<button class="btn block" data-act="plLoad">YouTube lista módosítása (most: ${esc(yt.pl.title)})</button>` : ''}
+    <label class="chk field" style="margin-top:10px"><input type="checkbox" id="ytShorts" ${yt.shortsHide !== false ? 'checked' : ''}> Shorts elrejtése (3 percnél rövidebb videók)</label>
     <div class="section-title">Csatornák (${yt.channels.length})</div>
     <div class="small muted" style="padding:0 4px 8px">Az elrejtett csatornák videói nem jelennek meg.</div>
     ${yt.channels.map(c => `<div class="yt-ch">${c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
@@ -681,7 +754,8 @@ function render(){
   else if (tab === 'kozelgo') { const had = document.activeElement && document.activeElement.id === 'discQ';
     m.innerHTML = renderKozelgo(); bindDiscSearch(); if (had && $('#discQ')) { const q = $('#discQ'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (tab === 'youtube') { m.innerHTML = renderYoutube();
-    const sel = $('#ytChanSel'); if (sel) sel.addEventListener('change', () => { ytChan = sel.value; render(); }); }
+    const sel = $('#ytChanSel'); if (sel) sel.addEventListener('change', () => { ytChan = sel.value; render(); });
+    const sc = $('#ytShorts'); if (sc) sc.addEventListener('change', () => { yt.shortsHide = sc.checked; ytSave(); render(); }); }
   else m.innerHTML = renderBeall();
   if (sheetState && sheetState.type === 'detail') renderDetail();
 }
@@ -703,6 +777,12 @@ function bannerHtml(){
   return lines.length ? `<div class="banner">${lines.map(l => `<div>${l}</div>`).join('')}</div>` : '';
 }
 
+function backupBanner(){
+  if (!backupDue()) return '';
+  const last = +lsGet('nezonaplo.exportAt');
+  return `<div class="field" style="display:flex;gap:10px;align-items:center"><div style="flex:1" class="small">💾 ${last ? `${Math.floor((now() - last) / DAY)} napja nem mentettél.` : 'Még nem mentetted el a listádat.'} Mentsd iCloudba, hogy ne vesszen el.</div>
+    <div style="display:flex;flex-direction:column;gap:6px"><button class="btn primary" data-act="export">Mentés</button><button class="btn" data-act="remindLater">Később</button></div></div>`;
+}
 function renderNezem(){
   const list = state.shows.filter(sh => sh.status === 'nezem');
   if (!list.length) return bannerHtml() + `<div class="empty"><b>Még nincs itt semmi</b>Nyomd meg a <b style="display:inline;color:var(--accent)">+</b> gombot, és add hozzá a sorozatot, amit épp nézel.</div>`;
@@ -713,7 +793,7 @@ function renderNezem(){
     return [2, 0];
   };
   list.sort((a, b) => { const ka = key(a), kb = key(b); return ka[0] - kb[0] || ka[1] - kb[1] || a.name.localeCompare(b.name, 'hu'); });
-  return bannerHtml() + list.map(cardNezem).join('');
+  return backupBanner() + bannerHtml() + list.map(cardNezem).join('');
 }
 function cardNezem(sh){
   const ua = unwatchedAired(sh);
@@ -754,7 +834,7 @@ function renderTervezem(){
     else if (!ns && nx) sub = `Premier: ${rel(nx.d)}`;
     else if (ns) sub = `${ns} évad elérhető` + (isEnded(sh) ? ' · befejezett' : '') + (nx ? ` · köv.: ${rel(nx.d)}` : '');
     else sub = 'Még nincs bemutatva';
-    const net = sh.meta && sh.meta.network ? ` · ${esc(sh.meta.network)}` : '';
+    const net = provShort(sh) ? ` · 📺 ${esc(provShort(sh))}` : (sh.meta && sh.meta.network ? ` · ${esc(sh.meta.network)}` : '');
     const badge = recentPremiere(sh) ? '<span class="badge">ÚJ ÉVAD</span>' : '';
     return `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}
       <div class="body"><div class="name">${esc(sh.name)}${badge}</div><div class="sub">${sub}${net}</div>
@@ -768,6 +848,7 @@ function cardFilm(sh){
   if (nx) sub = `<span style="color:var(--accent);font-weight:600">${esc(nx.label)}: ${rel(nx.d)}</span>`;
   else if (fd && fd.d > now()) sub = `Várható: ${esc(fmtFilmDate(fd))}`;
   else sub = esc([filmYear(sh), sh.meta && sh.meta.desc].filter(Boolean).join(' · ') || 'Film');
+  if (provShort(sh)) sub += ` · 📺 ${esc(provShort(sh))}`;
   return `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}
     <div class="body"><div class="name">${esc(sh.name)}<span class="badge gray">FILM</span></div><div class="sub">${sub}</div>
     ${sh.notes ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
@@ -791,7 +872,11 @@ function upcomingItems(){
       if (!m && fd && fd.prec < 11 && fd.d > startOfDay(now()) - 365*DAY && new Date(fd.d).getFullYear() >= new Date().getFullYear()) noDate.push(sh);
       continue;
     }
-    const fut = futureEps(sh);
+    let fut = futureEps(sh);
+    if (schedOn(sh) && (sh.sched.force || !fut.length)) {
+      const sd = schedNext(sh); fut = [];
+      if (sd) items.push({sh, d: sd, label: schedLabel(sh) + ' · saját adásrend', key: sh.id + 'w'});
+    }
     const seen = new Set();
     fut.forEach((e, i) => {
       if (i === 0 || e.n === 1 || e.d - t < 14*DAY) {
@@ -801,7 +886,7 @@ function upcomingItems(){
     });
     const m = manualFuture(sh);
     if (m) items.push({sh, d:m, label:sh.manualNext.label || 'Kézi emlékeztető', premiere:/évad|season/i.test(sh.manualNext.label||''), key:sh.id + 'm'});
-    if (!fut.length && !m && !isEnded(sh) && sh.tvmazeId) noDate.push(sh);
+    if (!fut.length && !m && !schedOn(sh) && !isEnded(sh) && sh.tvmazeId) noDate.push(sh);
   }
   items.sort((a, b) => a.d - b.d);
   return {items, noDate};
@@ -841,20 +926,50 @@ function renderSajat(){
   return html;
 }
 
+function statsHtml(){
+  const y = new Date().getFullYear(), st = (state.stats || {})[y] || {eps: 0, shows: {}};
+  const films = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam' && sh.seenAt && new Date(sh.seenAt).getFullYear() === y);
+  const top = Object.entries(st.shows).map(([id, n]) => [byId(id), n]).filter(([sh, n]) => sh && n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const rated = state.shows.filter(sh => sh.rating);
+  const best = rated.slice().sort((a, b) => b.rating - a.rating || (b.seenAt || 0) - (a.seenAt || 0)).slice(0, 5);
+  const avg = rated.length ? (rated.reduce((a, sh) => a + sh.rating, 0) / rated.length).toFixed(1).replace('.', ',') : '';
+  return `<div class="section-title">${y} – statisztika</div>
+  <div class="field">
+    <div class="stat-row"><div><b>${st.eps}</b><span>megnézett rész</span></div><div><b>${top.length ? Object.values(st.shows).filter(n => n > 0).length : 0}</b><span>sorozat</span></div><div><b>${films.length}</b><span>film</span></div></div>
+    ${top.length ? `<div class="small muted" style="margin-top:10px">Legtöbbet nézett: ${top.map(([sh, n]) => `${esc(sh.name)} (${n})`).join(', ')}</div>` : ''}
+    ${best.length ? `<div class="small muted" style="margin-top:6px">Legjobbra értékelt: ${best.map(sh => `${esc(sh.name)} <span style="color:var(--warn)">${starsTxt(sh.rating)}</span>`).join(', ')}${avg ? ` · átlag: ${avg}` : ''}</div>` : ''}
+    <div class="small muted" style="margin-top:6px">A részeket ${state.statsSince ? fmtDate(state.statsSince, {year: 'numeric'}) + ' óta' : 'mostantól'} számolja.</div>
+  </div>`;
+}
 function renderBeall(){
   const archived = state.shows.filter(sh => sh.status === 'abbahagytam');
   const seenFilms = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam').sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0));
-  const mini = sh => `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}<div class="body"><div class="name">${esc(sh.name)}${isFilm(sh) ? '<span class="badge gray">FILM</span>' : ''}</div>${sh.seenAt ? `<div class="sub small">Láttad: ${fmtDate(sh.seenAt)}</div>` : ''}</div></div>`;
+  const mini = sh => `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}<div class="body"><div class="name">${esc(sh.name)}${isFilm(sh) ? '<span class="badge gray">FILM</span>' : ''}</div>${sh.seenAt ? `<div class="sub small">Láttad: ${fmtDate(sh.seenAt)}${sh.rating ? ' · <span style="color:var(--warn)">' + starsTxt(sh.rating) + '</span>' : ''}</div>` : ''}</div></div>`;
   const last = state.lastRefresh ? `${rel(state.lastRefresh)} ${new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(new Date(state.lastRefresh))}` : 'még soha';
-  return `
+  return statsHtml() + `
   <div class="section-title">Adatok</div>
   <div class="field">
     <div class="small muted">${state.shows.filter(s => !isFilm(s)).length} sorozat, ${state.shows.filter(isFilm).length} film · utolsó frissítés: ${last} · verzió: ${APP_VER}</div>
     <button class="btn block primary" data-act="refresh">Frissítés most</button>
-    <button class="btn block" data-act="export">Mentés fájlba (export)</button>
-    <button class="btn block" data-act="import">Visszatöltés fájlból (import)</button>
-    <div class="small muted" style="margin-top:10px">Az adatok csak ezen a telefonon tárolódnak. Időnként mentsd el őket fájlba (pl. iCloud Drive-ra), hogy ne vesszenek el.</div>
+    <button class="btn block" data-act="export">Mentés iCloudba / fájlba</button>
+    <button class="btn block" data-act="import">Visszatöltés iCloudból / fájlból</button>
+    <div class="small muted" style="margin-top:8px">Mentésnél a megjelenő menüben válaszd: <b>Mentés a Fájlokba → iCloud Drive</b>. Ha már van ott mentés, nyomd meg a <b>Csere</b> gombot. Utolsó mentés: ${lsGet('nezonaplo.exportAt') ? fmtDate(+lsGet('nezonaplo.exportAt')) : 'még nem volt'}.</div>
   </div>
+  <div class="section-title">Automatikus mentés Google Drive-ra (választható)</div>
+  <div class="field">${lsGet('nezonaplo.driveOn') === '1' && driveOk() ? `
+    <div class="small">Automatikus mentés: <b style="color:var(--ok)">bekapcsolva</b> · utolsó: ${lsGet('nezonaplo.driveAt') ? rel(+lsGet('nezonaplo.driveAt')) + ' ' + new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit'}).format(new Date(+lsGet('nezonaplo.driveAt'))) : 'még nem volt'}</div>
+    <div class="small muted" style="margin-top:4px">Ha bezárod az appot vagy frissíted a YouTube-ot, a változások felkerülnek a Drive-odra („${DRIVE_NAME}”).</div>
+    <button class="btn block primary" data-act="driveSave">Mentés most</button>
+    <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>
+    <button class="btn block" data-act="driveOff">Automatikus mentés kikapcsolása</button>` : `
+    <div class="small muted">Az iCloudba csak kézzel lehet menteni (az Apple nem engedi a weboldalaknak). Ha szeretnéd, hogy magától mentsen, kapcsold be a Google Drive-ot – az app csak a saját mentésfájlját látja ott.</div>
+    <button class="btn block primary" data-act="driveSave">Bekapcsolás</button>
+    <button class="btn block" data-act="driveRestore">Visszatöltés a Drive-ról</button>`}</div>
+  <div class="section-title">Hol nézhető? (TMDB)</div>
+  <div class="field">${tmdbKey() ? `<div class="small">TMDB-kulcs: <b style="color:var(--ok)">beállítva</b>. A sorozatok és filmek adatlapján látod, melyik szolgáltatón nézhetők Magyarországon, és a magyar leírást.</div>
+    <button class="btn block" data-act="tmdbReset">Kulcs törlése</button>` : `<div class="small muted">Add meg az ingyenes TMDB API-kulcsodat (themoviedb.org → Beállítások → API), és az adatlapokon megjelenik, hol nézhető a sorozat vagy film Magyarországon (Netflix, Max, Disney+…), plusz a magyar leírás.</div>
+    <input type="text" id="tmdbIn" placeholder="API-kulcs vagy olvasási token" autocomplete="off" autocapitalize="off" autocorrect="off" style="margin-top:8px">
+    <button class="btn block primary" data-act="tmdbSave">Mentés</button>`}</div>
   <div class="section-title">Megnézett filmek (${seenFilms.length})</div>
   <div class="list-plain">${seenFilms.length ? seenFilms.map(mini).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}</div>
   <div class="section-title">Abbahagyott / nem érdekel (${archived.length})</div>
@@ -867,6 +982,7 @@ function renderBeall(){
 
 /* ---------- lapok (sheet) ---------- */
 function openSheet(st){ sheetState = st; $('#sheetBg').classList.add('open');
+  if (st.type === 'detail') { const sh = byId(st.id); if (sh) tmdbLoad(sh).then(ch => { if (ch && sheetState && sheetState.id === st.id) renderDetail(); }); }
   if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); }
 function closeSheet(){ sheetState = null; $('#sheetBg').classList.remove('open'); $('#sheet').innerHTML = ''; }
 
@@ -1049,9 +1165,15 @@ function renderDetail(){
     <div class="field"><label>Lista</label><div class="seg" id="dSeg">
       ${['nezem','tervezem','abbahagytam'].map(v => `<button data-v="${v}" class="${sh.status === v ? 'on' : ''}">${{nezem:'Nézem',tervezem:'Tervezem',abbahagytam:'Abbahagytam'}[v]}</button>`).join('')}</div></div>
     <div class="field"><label>Hol tartasz? (az utolsó rész, amit láttál)</label>${progress}</div>
+    ${starsHtml(sh)}
+    ${provHtml(sh)}${descHtml(sh)}
     <div class="field"><label>Következő</label><div>${next}</div></div>
     ${sh.tvmazeId ? `<div class="field"><label>Streamingen előrébb jár? (pl. RTL+ Premium, TV2 Play Prémium)</label>
       <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>` : ''}
+    <div class="field"><label>Saját adásrend (ha a dátum hiányzik vagy hibás, pl. szombat 20:00)</label>
+      <div class="wk" id="dWk">${WD_HU.map(([l, d]) => `<button data-d="${d}" class="${sh.sched && sh.sched.days.includes(d) ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <input type="time" id="dTime" value="${esc((sh.sched && sh.sched.time) || '20:00')}" style="margin-top:8px">
+      ${sh.tvmazeId ? `<label class="chk"><input type="checkbox" id="dForce" ${sh.sched && sh.sched.force ? 'checked' : ''}> Mindig ezt használd az adatbázis dátumai helyett</label>` : ''}</div>
     <div class="field"><label>Saját emlékeztető dátum (pl. ha olvastál az új évadról)</label>
       <input type="date" id="dDate" value="${sh.manualNext ? esc(sh.manualNext.date) : ''}">
       <input type="text" id="dLabel" placeholder="pl. 3. évad premier" value="${sh.manualNext ? esc(sh.manualNext.label) : ''}" style="margin-top:8px"></div>
@@ -1064,11 +1186,19 @@ function renderDetail(){
     <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button>`;
 
   $('#dSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; sh.status = b.dataset.v; save(); render(); });
+  const saveSched = () => {
+    const days = [...document.querySelectorAll('#dWk button.on')].map(b => +b.dataset.d);
+    sh.sched = days.length ? {days, time: $('#dTime').value || '20:00', force: !!($('#dForce') && $('#dForce').checked)} : null;
+    save(); render();
+  };
+  $('#dWk').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; b.classList.toggle('on'); saveSched(); });
+  $('#dTime').addEventListener('change', saveSched);
+  if ($('#dForce')) $('#dForce').addEventListener('change', saveSched);
   const ah = $('#dAhead'); if (ah) ah.addEventListener('change', () => { sh.ahead = parseInt(ah.value) || 0; save(); render(); });
   const prog = $('#dProg');
-  if (prog) prog.addEventListener('change', () => { const [s, n] = prog.value.split('-').map(Number); sh.lastSeason = s; sh.lastEpisode = n; save(); render(); });
+  if (prog) prog.addEventListener('change', () => { const [s, n] = prog.value.split('-').map(Number); setProgress(sh, s, n); save(); render(); });
   ['dS','dE'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', () => {
-    sh.lastSeason = Math.max(0, parseInt($('#dS').value) || 0); sh.lastEpisode = Math.max(0, parseInt($('#dE').value) || 0); save(); render(); }); });
+    setProgress(sh, Math.max(0, parseInt($('#dS').value) || 0), Math.max(0, parseInt($('#dE').value) || 0)); save(); render(); }); });
   const saveManualNext = () => { const d = $('#dDate').value; sh.manualNext = d ? {date:d, label:$('#dLabel').value.trim()} : null; save(); };
   $('#dDate').addEventListener('change', () => { saveManualNext(); render(); });
   $('#dLabel').addEventListener('input', saveManualNext);
@@ -1094,6 +1224,8 @@ function renderFilmDetail(sh){
         (fd && fd.d > now() ? `<div style="color:var(--accent);font-weight:700;margin-top:6px">Várható: ${esc(fmtFilmDate(fd))}</div>` : '')}</div></div>
     <div class="field"><label>Lista</label><div class="seg" id="dSeg">
       ${[['tervezem','Megnézném'],['lattam','Láttam'],['abbahagytam','Nem érdekel']].map(([v, l]) => `<button data-v="${v}" class="${sh.status === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    ${sh.status === 'lattam' ? starsHtml(sh) : ''}
+    ${provHtml(sh)}${descHtml(sh)}
     ${dates.length ? `<div class="field"><label>Megjelenés</label>${dates.map(d => `<div>${d}</div>`).join('')}</div>` : ''}
     <div class="field"><label>Saját emlékeztető (pl. mikor kerül streamingre)</label>
       <input type="date" id="dDate" value="${sh.manualNext ? esc(sh.manualNext.date) : ''}">
@@ -1112,13 +1244,98 @@ function renderFilmDetail(sh){
   $('#dNotes').addEventListener('blur', render);
 }
 
+/* ---------- TMDB: hol nézhető Magyarországon (JustWatch adatai) + magyar leírás ---------- */
+const TMDB = 'https://api.themoviedb.org/3';
+const tmdbKey = () => lsGet('nezonaplo.tmdb') || '';
+async function tmdbGet(path, params){
+  const k = tmdbKey(), jwt = k.startsWith('eyJ');
+  const q = new URLSearchParams(Object.assign({}, params || {}, jwt ? {} : {api_key: k}));
+  const r = await fetch(`${TMDB}${path}?${q}`, jwt ? {headers: {Authorization: 'Bearer ' + k}} : {});
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+async function tmdbResolve(sh){
+  if (sh.tmdb) return sh.tmdb;
+  if (isFilm(sh)) {
+    const m = sh.meta || {};
+    if (m.tmdbId) return sh.tmdb = {type: 'movie', id: +m.tmdbId};
+    if (m.imdb) { const j = await tmdbGet(`/find/${m.imdb}`, {external_source: 'imdb_id'}); const r = (j.movie_results || [])[0]; if (r) return sh.tmdb = {type: 'movie', id: r.id}; }
+    return null;
+  }
+  if (!sh.tvmazeId) return null;
+  if (!sh.ext) { const j = await (await fetch(`${API}/shows/${sh.tvmazeId}`)).json(); sh.ext = {imdb: (j.externals || {}).imdb || null, tvdb: (j.externals || {}).thetvdb || null}; }
+  for (const [src, v] of [['imdb_id', sh.ext.imdb], ['tvdb_id', sh.ext.tvdb]]) {
+    if (!v) continue;
+    const j = await tmdbGet(`/find/${v}`, {external_source: src}); const r = (j.tv_results || [])[0];
+    if (r) return sh.tmdb = {type: 'tv', id: r.id};
+  }
+  return null;
+}
+const provList = a => (a || []).map(p => ({n: p.provider_name, l: p.logo_path}));
+async function tmdbLoad(sh, force){
+  if (!tmdbKey() || (!force && sh.tmdbInfo && now() - sh.tmdbInfo.at < 3 * DAY)) return false;
+  try {
+    const t = await tmdbResolve(sh);
+    if (!t) { sh.tmdbInfo = {at: now(), none: true}; save(); return true; }
+    const [det, prov] = await Promise.all([tmdbGet(`/${t.type}/${t.id}`, {language: 'hu-HU'}), tmdbGet(`/${t.type}/${t.id}/watch/providers`)]);
+    const hu = (prov.results || {}).HU || {};
+    sh.tmdbInfo = {at: now(), overview: det.overview || '', link: hu.link || '',
+      flat: provList(hu.flatrate), free: provList([...(hu.free || []), ...(hu.ads || [])]), rent: provList(hu.rent), buy: provList(hu.buy)};
+    // magyar sorozatcím, ha van fordítás (és nem írtad át)
+    const huName = det.name || det.title, orig = det.original_name || det.original_title;
+    if (!isFilm(sh) && !sh.customName && huName && huName !== orig && huName !== sh.name) { sh.name = huName; sh.customName = true; }
+    save(); return true;
+  } catch(e) { if (e.status === 401) toast('Hibás TMDB-kulcs'); return false; }
+}
+// a Tervezem/Nézem listák elemeinek háttérben feltöltése (sorban, kíméletesen)
+async function tmdbFill(){
+  if (!tmdbKey() || tmdbFill.busy) return; tmdbFill.busy = true;
+  for (const sh of state.shows.filter(sh => sh.status === 'tervezem' || sh.status === 'nezem')) {
+    if (await tmdbLoad(sh)) { render(); await sleep(300); }
+  }
+  tmdbFill.busy = false;
+}
+function provHtml(sh){
+  if (!tmdbKey()) return '';
+  const i = sh.tmdbInfo;
+  if (!i) return `<div class="field"><label>Hol nézhető Magyarországon?</label><div class="small muted">Betöltés…</div></div>`;
+  if (i.none) return '';
+  const chips = a => a.map(p => `<span class="prov">${p.l ? `<img src="https://image.tmdb.org/t/p/w92${esc(p.l)}" alt="">` : ''}${esc(p.n)}</span>`).join('');
+  const rows = [['Előfizetéssel', i.flat], ['Ingyen', i.free], ['Bérelhető', i.rent], ['Megvásárolható', i.buy]].filter(([, a]) => a && a.length);
+  return `<div class="field"><label>Hol nézhető Magyarországon?</label>
+    ${rows.length ? rows.map(([l, a]) => `<div class="small muted" style="margin:6px 0 4px">${l}</div><div class="provs">${chips(a)}</div>`).join('') :
+      '<div class="small">Jelenleg nem érhető el streamingen Magyarországon.</div>'}
+    <div class="small muted" style="margin-top:8px">Forrás: JustWatch (TMDB)${i.link ? ` · <a href="${esc(i.link)}" target="_blank" rel="noopener" style="color:var(--accent)">részletek</a>` : ''}</div></div>`;
+}
+const descHtml = sh => sh.tmdbInfo && sh.tmdbInfo.overview ? `<div class="field"><label>Leírás</label><div class="small" style="line-height:1.45">${esc(sh.tmdbInfo.overview)}</div></div>` : '';
+const provShort = sh => sh.tmdbInfo && sh.tmdbInfo.flat && sh.tmdbInfo.flat.length ? sh.tmdbInfo.flat.slice(0, 2).map(p => p.n).join(', ') : '';
+
+/* ---------- értékelés ---------- */
+function starsHtml(sh){
+  return `<div class="field"><label>Értékelésed</label><div class="stars">${[1,2,3,4,5].map(n =>
+    `<button data-act="rate" data-id="${sh.id}" data-v="${n}" class="${(sh.rating || 0) >= n ? 'on' : ''}" aria-label="${n} csillag">★</button>`).join('')}</div></div>`;
+}
+const starsTxt = r => r ? '★'.repeat(r) + '☆'.repeat(5 - r) : '';
+
 /* ---------- Felfedezés: közelgő premierek (upcoming.json, a GitHub naponta frissíti) ---------- */
 let upc = null;
 // "Nem érdekel": sorozatnál az egész műsor (minden évad), filmnél a film rejtve marad
 let discHidden = (() => { try { return JSON.parse(localStorage.getItem('nezonaplo.discHidden')) || {}; } catch(e) { return {}; } })();
 const discKey = it => it.f ? 'f:' + it.f.qid : 's:' + it.x.id;
 const saveDiscHidden = () => lsSet('nezonaplo.discHidden', JSON.stringify(discHidden));
-let showHiddenDisc = false, discQuery = '';
+let showHiddenDisc = false, discQuery = '', discForMe = lsGet('nezonaplo.discForMe') === '1';
+// kedvenc műfajok a követett sorozataid alapján (az értékelés is számít)
+function genreProfile(){
+  const w = {};
+  for (const sh of state.shows) {
+    if (isFilm(sh) || sh.status === 'abbahagytam' || !sh.meta || !sh.meta.genres) continue;
+    const k = 1 + (sh.rating ? (sh.rating - 3) * 0.5 : 0) + (sh.status === 'nezem' ? 0.5 : 0);
+    for (const g of sh.meta.genres) w[g] = (w[g] || 0) + k;
+  }
+  const max = Math.max(0, ...Object.values(w));
+  return new Set(Object.keys(w).filter(g => w[g] >= Math.max(1.5, max * 0.4)));
+}
+const forMe = (it, prof) => !!it.x && (it.x.genres || []).some(g => prof.has(g));
 function loadUpcoming(){
   if (!loadUpcoming.p) loadUpcoming.p = fetch('upcoming.json').then(r => r.json()).then(j => { upc = j; render(); })
     .catch(() => { loadUpcoming.p = null; upc = {error: true}; render(); });
@@ -1140,14 +1357,17 @@ function renderDiscover(){
   const seg = `<div class="seg" style="margin:0 0 12px">${[['uj','Új sorozatok'],['evad','Új évadok'],['film','Mozifilmek']].map(([v, l]) =>
     `<button data-act="discKind" data-v="${v}" class="${discKind === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (upc.error) return seg + '<div class="empty">Nem sikerült betölteni (nincs internet?).</div>';
-  return seg + `<input type="search" id="discQ" placeholder="Keresés a közelgők között…" value="${esc(discQuery)}" autocomplete="off" style="margin-bottom:8px">
+  const prof = genreProfile();
+  const me = discKind !== 'film' && prof.size ? `<label class="chk" style="margin:0 2px 10px"><input type="checkbox" id="discMe" ${discForMe ? 'checked' : ''}> ✨ Csak a nekem valók (${[...prof].map(g => GENRE_HU[g] || g).join(', ')})</label>` : '';
+  return seg + me + `<input type="search" id="discQ" placeholder="Keresés a közelgők között…" value="${esc(discQuery)}" autocomplete="off" style="margin-bottom:8px">
     <div id="discList">${discListHtml()}</div>`;
 }
 const discName = it => it.f ? it.f.name : (it.x.huName || it.x.name);
 function discListHtml(){
   const q = norm(discQuery), words = q.split(' ').filter(Boolean);
   const match = it => !words.length || (n => words.every(w => n.includes(w)))(norm([discName(it), it.f ? it.f.orig : it.x.name].join(' ')));
-  const all = discItems(words.length ? '' : discKind).filter(match), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
+  const prof = genreProfile();
+  const all = discItems(words.length ? '' : discKind).filter(match).filter(it => !discForMe || it.f || forMe(it, prof)), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
   const hiddenHtml = hidden.length ? `<button class="btn block" data-act="discShowHidden">${showHiddenDisc ? 'Elrejtettek bezárása' : `Elrejtettek (${hidden.length})`}</button>` +
     (showHiddenDisc ? hidden.map(it => { const n = discName(it);
       return `<div class="card" style="margin-top:8px"><div class="body"><div class="name">${esc(n)}</div></div><button class="btn" data-act="discUnhide" data-key="${esc(discKey(it))}">Visszahoz</button></div>`; }).join('') : '') : '';
@@ -1175,7 +1395,7 @@ function discListHtml(){
       <div class="date-chip"><div class="m">${new Intl.DateTimeFormat('hu-HU',{month:'short'}).format(d).replace('.','')}</div>
         <div class="d">${d.getDate()}</div><div class="w">${new Intl.DateTimeFormat('hu-HU',{weekday:'short'}).format(d)}</div></div>
       ${posterHtml({image: img, name}, 'poster disc-poster')}
-      <div class="body" style="flex:1;min-width:0"><div style="font-weight:700;line-height:1.25">${esc(name)}</div>
+      <div class="body" style="flex:1;min-width:0"><div style="font-weight:700;line-height:1.25">${esc(name)}${forMe(it, prof) ? ' <span title="A kedvenc műfajaid alapján">✨</span>' : ''}</div>
         <div class="sub muted small" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(sub)}</div></div>
       ${have ? '<span class="small muted" style="flex:none">✓ Listán</span>' : `<div class="acts" style="display:flex;flex-direction:column;gap:6px;flex:none">
         <button class="btn primary" ${act}>Érdekel</button><button class="btn" data-act="discHide" data-key="${esc(discKey(it))}">Nem érdekel</button></div>`}</div>`;
@@ -1183,6 +1403,7 @@ function discListHtml(){
   return html + hiddenHtml + `<div class="small muted" style="padding:10px 4px">Sorozatok: TVmaze (népszerűség szerint szűrve), filmek: Wikidata. Naponta frissül.</div>`;
 }
 function bindDiscSearch(){
+  const me = $('#discMe'); if (me) me.addEventListener('change', () => { discForMe = me.checked; lsSet('nezonaplo.discForMe', discForMe ? '1' : ''); const box = $('#discList'); if (box) box.innerHTML = discListHtml(); });
   const q = $('#discQ'); if (!q) return;
   q.addEventListener('input', () => { discQuery = q.value; const box = $('#discList'); if (box) box.innerHTML = discListHtml(); });
 }
@@ -1260,47 +1481,116 @@ async function linkShow(sh, tid){
 function plusOne(sh){
   if (sh.tvmazeId) {
     const nu = nextUnwatched(sh); if (!nu) return;
-    sh.lastSeason = nu.s; sh.lastEpisode = nu.n;
+    setProgress(sh, nu.s, nu.n);
     toast(`Megnézve: ${code(nu.s, nu.n)}`);
   } else {
-    if (!sh.lastSeason) sh.lastSeason = 1;
-    sh.lastEpisode += 1;
+    setProgress(sh, sh.lastSeason || 1, sh.lastSeason ? sh.lastEpisode + 1 : 1);
     toast(`Megnézve: ${code(sh.lastSeason, sh.lastEpisode)}`);
   }
   save(); render();
 }
 function caughtUp(sh){
   const ua = unwatchedAired(sh); if (!ua.length) return;
-  const last = ua[ua.length - 1]; sh.lastSeason = last.s; sh.lastEpisode = last.n; save(); render(); toast('Naprakész vagy 👍');
+  const last = ua[ua.length - 1]; setProgress(sh, last.s, last.n); save(); render(); toast('Naprakész vagy 👍');
 }
 async function shareOrDownload(filename, mime, text){
   const file = new File([text], filename, {type:mime});
   if (navigator.canShare && navigator.canShare({files:[file]})) {
-    try { await navigator.share({files:[file], title:filename}); return; } catch(e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({files:[file], title:filename}); return true; } catch(e) { if (e.name === 'AbortError') return false; }
   }
   const url = URL.createObjectURL(file);
   const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return true;
 }
-function exportData(){
-  const d = new Date();
-  shareOrDownload(`sorozatmemoria-${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}.json`, 'application/json',
-    JSON.stringify({app:'sorozatmemoria', version:1, exported:d.toISOString(), shows:state.shows.map(sh => Object.assign({}, sh, {cache:null})),
-      youtube:{seen:yt.seen, nope:yt.nope, hidden:yt.hidden, later:yt.later, pl:yt.pl || null, plDel:yt.plDel || []},
-      prefs:{discHidden}}, null, 1));
+function backupObj(){
+  return {app:'sorozatmemoria', version:1, exported:new Date().toISOString(), shows:state.shows.map(sh => Object.assign({}, sh, {cache:null})),
+    stats:state.stats || null, statsSince:state.statsSince || null,
+    youtube:{seen:yt.seen, nope:yt.nope, hidden:yt.hidden, later:yt.later, pl:yt.pl || null, plDel:yt.plDel || [], shortsHide:yt.shortsHide},
+    prefs:{discHidden}};
 }
+// iCloud: a megosztás menüben "Mentés a Fájlokba" → iCloud Drive. Mindig ugyanaz a fájlnév, így az iPhone felajánlja a cserét.
+async function exportData(){
+  const ok = await shareOrDownload('Nezonaplo-mentes.json', 'application/json', JSON.stringify(backupObj(), null, 1));
+  if (ok) { lsSet('nezonaplo.exportAt', String(now())); render(); }
+}
+const backupDue = () => state.shows.length > 0 && now() - (+lsGet('nezonaplo.exportAt') || +lsGet('nezonaplo.driveAt') || state.statsSince || 0) > 7 * DAY
+  && now() - (+lsGet('nezonaplo.driveAt') || 0) > 7 * DAY && now() - (+lsGet('nezonaplo.remindLater') || 0) > DAY;
+function applyBackup(j){
+  if (!j || !Array.isArray(j.shows)) throw new Error('nem jó fájl');
+  state = {shows:j.shows.map(sh => Object.assign({lastSeason:0, lastEpisode:0, notes:'', manualNext:null, cache:null}, sh, {id: sh.id || uid()})), lastRefresh:0,
+    stats:j.stats || undefined, statsSince:j.statsSince || undefined};
+  if (j.youtube) { Object.assign(yt, {seen:j.youtube.seen || {}, nope:j.youtube.nope || {}, hidden:j.youtube.hidden || {},
+    later:j.youtube.later || {}, pl:j.youtube.pl || null, plDel:j.youtube.plDel || [], shortsHide:j.youtube.shortsHide}); ytSave(); }
+  if (j.prefs && j.prefs.discHidden) { discHidden = j.prefs.discHidden; saveDiscHidden(); }
+  save(); render(); toast('Visszatöltve'); refreshAll(true);
+}
+
+/* ---------- automatikus mentés Google Drive-ra ---------- */
+const DRIVE_NAME = 'Nezonaplo-mentes.json';
+const strHash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36) + s.length; };
+let driveBusy = false;
+async function driveFetch(url, opts, keepalive){
+  const r = await fetch(url, Object.assign({}, opts, {keepalive: !!keepalive, headers: Object.assign({Authorization: 'Bearer ' + ytToken()}, (opts || {}).headers || {})}));
+  if (r.status === 401) { lsSet('nezonaplo.ytTok', ''); throw new Error('auth'); }
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; e.text = await r.text().catch(() => ''); throw e; }
+  return r.status === 204 ? null : r.json();
+}
+async function driveFind(){
+  const q = encodeURIComponent(`name='${DRIVE_NAME}' and trashed=false`);
+  const j = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&fields=files(id,modifiedTime)&spaces=drive`);
+  return (j.files || [])[0] || null;
+}
+function driveErr(e){
+  if (e.status === 403 && /accessNotConfigured|has not been used|disabled/i.test(e.text || '')) return 'A Google Drive API nincs bekapcsolva a Google Cloud projektben';
+  return 'Drive-mentés nem sikerült (' + e.message + ')';
+}
+async function driveBackup(byUser){
+  if (driveBusy) return;
+  if (!ytToken() || !driveOk()) { if (byUser) { lsSet('nezonaplo.driveOn', '1'); ytLogin(!!ytToken() || !!yt.fetchedAt); } return; }
+  const body = JSON.stringify(backupObj()), h = strHash(body.replace(/"exported":"[^"]*"/, ''));
+  if (!byUser && (h === lsGet('nezonaplo.driveHash') || now() - (+lsGet('nezonaplo.driveAt') || 0) < 2 * 60e3)) return;
+  driveBusy = true;
+  try {
+    let id = lsGet('nezonaplo.driveId');
+    if (!id) { const f = await driveFind(); id = f ? f.id : ''; }
+    const small = body.length < 60000; // iOS: háttérbe kerüléskor csak kis kérés megy át biztosan
+    try {
+      if (!id) throw Object.assign(new Error('new'), {status: 404});
+      await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body}, small);
+    } catch(e) {
+      if (e.status !== 404) throw e;
+      const b = 'nezonaplo' + uid();
+      const multi = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name: DRIVE_NAME, mimeType: 'application/json'})}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
+      const j = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {method: 'POST', headers: {'Content-Type': 'multipart/related; boundary=' + b}, body: multi});
+      id = j.id;
+    }
+    lsSet('nezonaplo.driveId', id); lsSet('nezonaplo.driveHash', h); lsSet('nezonaplo.driveAt', String(now()));
+    if (byUser) toast('Elmentve a Google Drive-ra');
+  } catch(e) {
+    if (e.message === 'auth') { if (byUser) ytLogin(true); }
+    else if (byUser) toast(driveErr(e));
+  }
+  driveBusy = false; if (tab === 'beall') render();
+}
+async function driveRestore(){
+  if (!ytToken() || !driveOk()) { lsSet('nezonaplo.driveOn', '1'); ytLogin(false); return; }
+  try {
+    const f = await driveFind(); if (!f) { toast('Nincs mentés a Drive-on'); return; }
+    const j = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`);
+    if (!confirm(`Visszatöltöd a ${fmtDate(Date.parse(f.modifiedTime), {hour: '2-digit', minute: '2-digit'})}-i Drive-mentést? Ez lecseréli a mostani listát.`)) return;
+    lsSet('nezonaplo.driveId', f.id); applyBackup(j);
+  } catch(e) { if (e.message === 'auth') ytLogin(true); else toast(driveErr(e)); }
+}
+const driveAuto = () => lsGet('nezonaplo.driveOn') === '1' && driveOk() && ytToken() && driveBackup(false);
 function importData(file){
   const r = new FileReader();
   r.onload = () => {
     try {
       const j = JSON.parse(r.result);
       if (!j || !Array.isArray(j.shows)) throw new Error('nem jó fájl');
-      if (!confirm(`${j.shows.length} sorozat betöltése? Ez lecseréli a mostani listát.`)) return;
-      state = {shows:j.shows.map(sh => Object.assign({lastSeason:0, lastEpisode:0, notes:'', manualNext:null, cache:null}, sh, {id: sh.id || uid()})), lastRefresh:0};
-      if (j.youtube) { Object.assign(yt, {seen:j.youtube.seen || {}, nope:j.youtube.nope || {}, hidden:j.youtube.hidden || {},
-        later:j.youtube.later || {}, pl:j.youtube.pl || null, plDel:j.youtube.plDel || []}); ytSave(); }
-      if (j.prefs && j.prefs.discHidden) { discHidden = j.prefs.discHidden; saveDiscHidden(); }
-      save(); render(); toast('Visszatöltve'); refreshAll(true);
+      if (!confirm(`${j.shows.length} sorozat/film betöltése? Ez lecseréli a mostani listát.`)) return;
+      applyBackup(j);
     } catch(e) { toast('Hibás fájl: ' + e.message); }
   };
   r.readAsText(file);
@@ -1381,9 +1671,17 @@ document.addEventListener('click', e => {
     case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); break;
     case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); break;
     case 'discShowHidden': showHiddenDisc = !showHiddenDisc; render(); break;
+    case 'rate': { const v = +el.dataset.v; sh.rating = sh.rating === v ? 0 : v; save(); render(); break; }
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;
     case 'refresh': refreshAll(true); break;
     case 'export': exportData(); break;
+    case 'remindLater': lsSet('nezonaplo.remindLater', String(now())); render(); break;
+    case 'driveSave': driveBackup(true); break;
+    case 'driveRestore': driveRestore(); break;
+    case 'driveOff': lsSet('nezonaplo.driveOn', ''); render(); break;
+    case 'tmdbSave': { const v = ($('#tmdbIn').value || '').trim(); if (v.length < 20) { toast('Ez nem tűnik TMDB-kulcsnak'); break; }
+      lsSet('nezonaplo.tmdb', v); render(); toast('TMDB-kulcs elmentve'); tmdbFill(); break; }
+    case 'tmdbReset': lsSet('nezonaplo.tmdb', ''); render(); break;
     case 'import': $('#importFile').click(); break;
     case 'wipe': if (confirm('Biztosan törölsz minden sorozatot? Ezt nem lehet visszavonni.')) { state = {shows:[], lastRefresh:0}; save(); render(); } break;
   }
@@ -1393,13 +1691,14 @@ $('#refreshBtn').addEventListener('click', () => tab === 'youtube' ? ytRefresh(t
 $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
 $('#coverFile').addEventListener('change', e => { setCover(e.target.files[0]); e.target.value = ''; });
 $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importData(f); e.target.value = ''; });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { render(); refreshAll(false); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { render(); refreshAll(false); } else driveAuto(); });
 window.addEventListener('online', () => refreshAll(false));
 
 const ytBack = ytHandleRedirect();
 render();
-refreshAll(false);
-if (ytBack) ytRefresh(true);
+refreshAll(false).then(tmdbFill);
+if (ytBack && tab === 'beall') driveBackup(true);
+else if (ytBack) ytRefresh(true);
 else if (tab === 'youtube' && ytToken() && now() - yt.fetchedAt > 30 * 60e3) ytRefresh(false);
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
