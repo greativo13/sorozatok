@@ -234,7 +234,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '25';
+const APP_VER = '26';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -371,10 +371,14 @@ function epDelta(sh, s1, n1, s2, n2){
   if (s2 === s1) return n2 - n1;
   return s2 > s1 ? n2 : 0;
 }
-function setProgress(sh, s, n){
+function setProgress(sh, s, n, count){
   const k = epDelta(sh, sh.lastSeason, sh.lastEpisode, s, n);
   sh.lastSeason = s; sh.lastEpisode = n;
   if (!k) return;
+  // nagy ugrás (pl. beállítod, hol tartasz egy régóta nézett sorozatban): rákérdezünk, hogy most nézted-e
+  if (count === 'ask' && k > 3 && !confirm(`${k} részt jelöltél megnézettnek.\n\nEzeket most nézted meg?\nOK = beszámít a statisztikába\nMégse = csak beállítom, hol tartok`)) return;
+  if (count === 'ask' && k < 0) count = true; // visszalépés: javítjuk a számlálót
+  if (!count) return;
   const y = new Date().getFullYear();
   state.stats = state.stats || {}; if (!state.statsSince) state.statsSince = now();
   const st = state.stats[y] = state.stats[y] || {eps: 0, shows: {}};
@@ -1098,7 +1102,7 @@ function renderSajat(){
 
 function statsData(y){
   const st = (state.stats || {})[y] || {eps: 0, shows: {}, months: {}};
-  const films = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam' && sh.seenAt && new Date(sh.seenAt).getFullYear() === y);
+  const films = state.shows.filter(sh => isFilm(sh) && sh.status === 'lattam' && !sh.seenOld && sh.seenAt && new Date(sh.seenAt).getFullYear() === y);
   const top = Object.entries(st.shows || {}).map(([id, n]) => [byId(id), n]).filter(([sh, n]) => sh && n > 0).sort((a, b) => b[1] - a[1]);
   const rated = state.shows.filter(sh => sh.rating);
   const best = rated.slice().sort((a, b) => b.rating - a.rating || (b.seenAt || 0) - (a.seenAt || 0));
@@ -1125,7 +1129,8 @@ function renderStats(){
       <div class="small muted" style="margin-top:6px">A részeket ${state.statsSince ? fmtDate(state.statsSince, {year: 'numeric'}) + ' óta' : 'mostantól'} számolja.</div></div>
     ${top.length ? `<div class="section-title">Legtöbbet nézett sorozatok</div><div class="list-plain">${top.slice(0, 5).map(([sh, n]) => row(sh, `<b>${n}</b> rész`)).join('')}</div>` : ''}
     ${best.length ? `<div class="section-title">Legjobbra értékelt</div><div class="list-plain">${best.slice(0, 5).map(sh => row(sh, `<span style="color:var(--warn)">${starsTxt(sh.rating)}</span>`)).join('')}</div>` : ''}
-    ${films.length ? `<div class="section-title">Idén látott filmek</div><div class="list-plain">${films.sort((a, b) => b.seenAt - a.seenAt).map(sh => row(sh, sh.rating ? `<span style="color:var(--warn)">${starsTxt(sh.rating)}</span>` : fmtDate(sh.seenAt))).join('')}</div>` : ''}`;
+    ${films.length ? `<div class="section-title">Idén látott filmek</div><div class="list-plain">${films.sort((a, b) => b.seenAt - a.seenAt).map(sh => row(sh, sh.rating ? `<span style="color:var(--warn)">${starsTxt(sh.rating)}</span>` : fmtDate(sh.seenAt))).join('')}</div>` : ''}
+    <button class="btn block danger" data-act="statsReset">Statisztika nullázása</button>`;
 }
 const grpOpen = {};
 const group = (title, body) => { const k = title.replace(/\s*\(\d+\)$/, ''); return `<details class="more grp" data-g="${esc(k)}" ${grpOpen[k] ? 'open' : ''}><summary>${title}</summary>${body}</details>`; };
@@ -1392,9 +1397,9 @@ function renderDetail(){
   const dl = $('#dDelay'); if (dl) dl.addEventListener('change', () => { sh.huDelay = parseInt(dl.value) || 0; save(); render(); });
   const ah = $('#dAhead'); if (ah) ah.addEventListener('change', () => { sh.ahead = parseInt(ah.value) || 0; save(); render(); });
   const prog = $('#dProg');
-  if (prog) prog.addEventListener('change', () => { const [s, n] = prog.value.split('-').map(Number); setProgress(sh, s, n); save(); render(); });
+  if (prog) prog.addEventListener('change', () => { const [s, n] = prog.value.split('-').map(Number); setProgress(sh, s, n, 'ask'); save(); render(); });
   ['dS','dE'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', () => {
-    setProgress(sh, Math.max(0, parseInt($('#dS').value) || 0), Math.max(0, parseInt($('#dE').value) || 0)); save(); render(); }); });
+    setProgress(sh, Math.max(0, parseInt($('#dS').value) || 0), Math.max(0, parseInt($('#dE').value) || 0), 'ask'); save(); render(); }); });
   const saveManualNext = () => { const d = $('#dDate').value; sh.manualNext = d ? {date:d, label:$('#dLabel').value.trim()} : null; save(); };
   $('#dDate').addEventListener('change', () => { saveManualNext(); render(); });
   $('#dLabel').addEventListener('input', saveManualNext);
@@ -1433,7 +1438,7 @@ function renderFilmDetail(sh){
     ${sh.customImage ? `<button class="btn block" data-act="coverReset" data-id="${sh.id}">Saját borító törlése</button>` : ''}
     <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button></details>`;
   $('#dSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
-    sh.status = b.dataset.v; if (sh.status === 'lattam' && !sh.seenAt) sh.seenAt = now(); save(); render(); if (sh.status === 'lattam') sequelCheck(sh); });
+    if (b.dataset.v === 'lattam' && sh.status !== 'lattam') markFilmSeen(sh); else sh.status = b.dataset.v; save(); render(); if (sh.status === 'lattam') sequelCheck(sh); });
   const saveManualNext = () => { const d = $('#dDate').value; sh.manualNext = d ? {date:d, label:$('#dLabel').value.trim()} : null; save(); };
   $('#dDate').addEventListener('change', () => { saveManualNext(); render(); });
   $('#dLabel').addEventListener('input', saveManualNext);
@@ -1626,7 +1631,7 @@ async function recAdd(k, status){
       const G = Object.fromEntries(Object.entries(GM).map(([n, id]) => [id, n]));
       state.shows.push({id: uid(), kind: 'film', qid: null, tmdb: {type: 'movie', id: it.id}, name: it.name, image: it.poster,
         meta: {orig: it.orig, desc: '', genres: (d.genres || []).map(g => G[g.id]).filter(Boolean), release: d.release_date ? Date.parse(d.release_date + 'T12:00:00') : null, prec: 11, tmdbId: it.id, imdb: d.imdb_id || null},
-        status, lastSeason: 0, lastEpisode: 0, notes: '', manualNext: null, added: now(), seenAt: status === 'lattam' ? now() : null, cache: {fetchedAt: now()}});
+        status, lastSeason: 0, lastEpisode: 0, notes: '', manualNext: null, added: now(), seenAt: status === 'lattam' ? now() : null, seenOld: status === 'lattam', cache: {fetchedAt: now()}});
       save(); toast(`${it.name} → ${status === 'lattam' ? 'megnézett filmek' : 'Tervezem'}`);
     } else {
       const ex = await tmdbGet(`/tv/${it.id}/external_ids`);
@@ -1833,17 +1838,17 @@ async function linkShow(sh, tid){
 function plusOne(sh){
   if (sh.tvmazeId) {
     const nu = nextUnwatched(sh); if (!nu) return;
-    setProgress(sh, nu.s, nu.n);
+    setProgress(sh, nu.s, nu.n, true);
     toast(`Megnézve: ${code(nu.s, nu.n)}`);
   } else {
-    setProgress(sh, sh.lastSeason || 1, sh.lastSeason ? sh.lastEpisode + 1 : 1);
+    setProgress(sh, sh.lastSeason || 1, sh.lastSeason ? sh.lastEpisode + 1 : 1, true);
     toast(`Megnézve: ${code(sh.lastSeason, sh.lastEpisode)}`);
   }
   save(); render();
 }
 function caughtUp(sh){
   const ua = unwatchedAired(sh); if (!ua.length) return;
-  const last = ua[ua.length - 1]; setProgress(sh, last.s, last.n); save(); render(); toast('Naprakész vagy 👍');
+  const last = ua[ua.length - 1]; setProgress(sh, last.s, last.n, 'ask'); save(); render(); toast('Naprakész vagy 👍');
 }
 async function shareOrDownload(filename, mime, text){
   const file = new File([text], filename, {type:mime});
@@ -1865,6 +1870,11 @@ function backupObj(){
 async function exportData(){
   const ok = await shareOrDownload('Nezonaplo-mentes.json', 'application/json', JSON.stringify(backupObj(), null, 1));
   if (ok) { lsSet('nezonaplo.exportAt', String(now())); render(); }
+}
+// film megnézettnek jelölése: most láttad (idén számít) vagy régebben?
+function markFilmSeen(sh){
+  sh.status = 'lattam'; sh.seenAt = now();
+  sh.seenOld = !confirm(`${sh.name}\n\nMost nézted meg?\nOK = most (beszámít az idei statisztikába)\nMégse = régebben láttam`);
 }
 const backupDue = () => state.shows.length > 0 && now() - (+lsGet('nezonaplo.exportAt') || +lsGet('nezonaplo.driveAt') || state.statsSince || 0) > 7 * DAY
   && now() - (+lsGet('nezonaplo.driveAt') || 0) > 7 * DAY && now() - (+lsGet('nezonaplo.remindLater') || 0) > DAY;
@@ -2020,7 +2030,7 @@ document.addEventListener('click', e => {
     case 'saveManual': saveManual(); break;
     case 'add': addFromSearch(Number(el.dataset.tid), el.dataset.st); break;
     case 'addFilm': addFilm(el.dataset.qid, el.dataset.st); break;
-    case 'seen': e.stopPropagation(); sh.status = 'lattam'; sh.seenAt = now(); save(); render(); toast(`${sh.name} → megnézett filmek`); sequelCheck(sh); break;
+    case 'seen': e.stopPropagation(); markFilmSeen(sh); save(); render(); toast(`${sh.name} → megnézett filmek`); sequelCheck(sh); break;
     case 'finish': e.stopPropagation(); sh.status = 'befejeztem'; save(); render(); toast(`${sh.name} befejezve – szólok, ha új évad jön`); break;
     case 'askYes': askAnswer(sh, el.dataset.k, true); break;
     case 'askNo': askAnswer(sh, el.dataset.k, false); break;
@@ -2077,6 +2087,8 @@ document.addEventListener('click', e => {
       const pick = pool[Math.floor(Math.random() * pool.length)]; if (!pick) break;
       if (pick.sh) openSheet({type: 'detail', id: pick.sh.id}); else openSheet({type: 'recd', k: pick.type + ':' + pick.id});
       toast('🎲 Ezt ajánlom!'); break; }
+    case 'statsReset': if (confirm('Lenullázod az idei statisztikát? A sorozataid és filmjeid megmaradnak, csak a számlálás indul újra.')) {
+      state.stats = {}; state.statsSince = now(); state.shows.forEach(x => { if (isFilm(x) && x.status === 'lattam') x.seenOld = true; }); save(); render(); renderStats(); toast('Statisztika nullázva'); } break;
     case 'statsOpen': openSheet({type: 'stats'}); break;
     case 'discGenre': lsSet('nezonaplo.discGenres', JSON.stringify(toggleIn(lsArr('nezonaplo.discGenres'), el.dataset.v))); render(); break;
     case 'discOpen': openSheet({type: 'disc', key: el.dataset.key}); break;
@@ -2106,6 +2118,9 @@ $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; 
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { render(); refreshAll(false); } else driveAuto(); });
 window.addEventListener('online', () => refreshAll(false));
 
+// egyszeri javítás: az eddigi számok a sorozatok beállításából jöttek, nem valódi nézésből
+if (!lsGet('nezonaplo.statsFix1')) { lsSet('nezonaplo.statsFix1', '1');
+  if (state.stats) { state.stats = {}; state.statsSince = now(); state.shows.forEach(x => { if (isFilm(x) && x.status === 'lattam') x.seenOld = true; }); save(); } }
 const ytBack = ytHandleRedirect();
 render();
 refreshAll(false).then(tmdbFill).then(() => sequelCheck());
