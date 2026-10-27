@@ -121,6 +121,13 @@ textarea{min-height:70px;resize:vertical}
 .toast.show{opacity:1}
 .list-plain .card{padding:8px 10px}
 .list-plain .poster{width:40px;height:56px;font-size:16px}
+.yt-row{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:14px;padding:8px;margin-bottom:8px;color:inherit;text-decoration:none;position:relative}
+.yt-row img,.yt-row .yt-ph{width:120px;height:68px;border-radius:8px;object-fit:cover;background:var(--surface2);flex:none}
+.yt-row.new{box-shadow:inset 3px 0 0 var(--accent)}
+.yt-body{flex:1;min-width:0}
+.yt-title{font-weight:600;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}
+.yt-ch{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:12px;padding:6px 8px;margin-bottom:6px}
+.yt-ch img,.yt-ch .yt-ph{width:32px;height:32px;border-radius:50%;flex:none;background:var(--surface2)}
 .cover-btn{position:relative;flex:none}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
   display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
@@ -139,6 +146,7 @@ textarea{min-height:70px;resize:vertical}
   <button data-tab="nezem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M8 2l4 4 4-4"/></svg>Nézem</button>
   <button data-tab="tervezem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Tervezem</button>
   <button data-tab="kozelgo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Közelgő</button>
+  <button data-tab="youtube"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z" fill="currentColor"/></svg>YouTube</button>
   <button data-tab="beall"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Beállítások</button>
 </nav>
 
@@ -149,12 +157,12 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '6';
+const APP_VER = '7';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
 const STALE = 12 * 3600e3;
-const TITLES = {nezem:'Nézem', tervezem:'Tervezem', kozelgo:'Közelgő', beall:'Beállítások'};
+const TITLES = {nezem:'Nézem', tervezem:'Tervezem', kozelgo:'Közelgő', youtube:'YouTube', beall:'Beállítások'};
 const STATUS_HU = {'Running':'Fut','Ended':'Véget ért','To Be Determined':'Bizonytalan','In Development':'Készül'};
 
 let state = load();
@@ -369,9 +377,136 @@ async function refreshAll(force){
   if (force) toast(fails ? `Frissítve (${fails} hiba)` : 'Frissítve');
 }
 
+/* ---------- YouTube (Google-bejelentkezés, csak olvasás) ----------
+   Böngészőből a YouTube RSS nem olvasható, ezért a YouTube Data API-t
+   használjuk. Bejelentkezés átirányítással (iPhone-os főképernyő-appban is
+   működik); a kapott kulcs 1 óráig érvényes, utána egy koppintással újat kérünk. */
+const YT_CLIENT_DEFAULT = '';
+const YT_KEY = 'nezonaplo.yt';
+const ytClient = () => lsGet('nezonaplo.ytClient') || YT_CLIENT_DEFAULT;
+let yt = (() => { try { return JSON.parse(localStorage.getItem(YT_KEY)) || null; } catch(e) { return null; } })()
+  || {channels:[], videos:[], seen:{}, hidden:{}, fetchedAt:0};
+let ytBusy = false, ytChan = '';
+const ytSave = () => { try { localStorage.setItem(YT_KEY, JSON.stringify(yt)); } catch(e) { toast('Nem sikerült menteni a YouTube adatokat'); } };
+function ytToken(){ try { const t = JSON.parse(localStorage.getItem('nezonaplo.ytTok')); return t && t.exp > now() + 60e3 ? t.t : null; } catch(e) { return null; } }
+function ytLogin(silent){
+  if (!ytClient()) { toast('Előbb add meg a Google Client ID-t'); return; }
+  const st = uid(); lsSet('nezonaplo.ytState', st); lsSet('nezonaplo.ytSilent', silent ? '1' : '');
+  const p = new URLSearchParams({client_id: ytClient(), redirect_uri: location.origin + location.pathname, response_type: 'token',
+    scope: 'https://www.googleapis.com/auth/youtube.readonly', state: st, include_granted_scopes: 'true'});
+  if (silent) p.set('prompt', 'none');
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + p;
+}
+// visszatérés a Google-től: #access_token=...  vagy  #error=...
+function ytHandleRedirect(){
+  if (!/[#&](access_token|error)=/.test(location.hash)) return false;
+  const h = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, '', location.pathname + location.search);
+  const okState = h.get('state') && h.get('state') === lsGet('nezonaplo.ytState');
+  tab = 'youtube'; lsSet('sorozatmemoria.tab', tab);
+  if (h.get('access_token') && okState) {
+    lsSet('nezonaplo.ytTok', JSON.stringify({t: h.get('access_token'), exp: now() + (parseInt(h.get('expires_in')) || 3600) * 1000}));
+    return true;
+  }
+  if (h.get('error') && lsGet('nezonaplo.ytSilent') === '1') { ytLogin(false); return false; } // csendes próbálkozás nem ment → rendes bejelentkezés
+  if (h.get('error')) setTimeout(() => toast('Google-bejelentkezés megszakítva'), 300);
+  return false;
+}
+async function ytApi(path, params){
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams(params)}`, {headers: {Authorization: 'Bearer ' + ytToken()}});
+  if (r.status === 401) { lsSet('nezonaplo.ytTok', ''); throw new Error('auth'); }
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+async function ytRefresh(byUser){
+  if (ytBusy) return;
+  if (!ytToken()) { if (byUser) ytLogin(true); return; }
+  if (!navigator.onLine) { if (byUser) toast('Nincs internet'); return; }
+  ytBusy = true; render(); $('#refreshBtn').classList.add('spin');
+  try {
+    const channels = []; let page = '';
+    do {
+      const j = await ytApi('subscriptions', Object.assign({part: 'snippet', mine: 'true', maxResults: '50', order: 'alphabetical'}, page ? {pageToken: page} : {}));
+      for (const it of j.items || []) channels.push({id: it.snippet.resourceId.channelId, title: it.snippet.title,
+        thumb: ((it.snippet.thumbnails || {}).default || {}).url || null});
+      page = j.nextPageToken || '';
+    } while (page);
+    const limit = now() - 30 * DAY, videos = [];
+    const todo = channels.filter(c => !yt.hidden[c.id]);
+    const worker = async () => {
+      for (let c; (c = todo.shift()); ) {
+        try {
+          const j = await ytApi('playlistItems', {part: 'snippet', playlistId: 'UU' + c.id.slice(2), maxResults: '6'});
+          for (const it of j.items || []) {
+            const s = it.snippet, pub = Date.parse(s.publishedAt);
+            if (!s.resourceId || pub < limit || /^(Private|Deleted) video$/.test(s.title)) continue;
+            videos.push({id: s.resourceId.videoId, ch: c.id, title: s.title, pub,
+              thumb: ((s.thumbnails || {}).medium || (s.thumbnails || {}).default || {}).url || null});
+          }
+        } catch(e) { if (e.message === 'auth') throw e; } // pl. üres csatorna: kihagyjuk
+      }
+    };
+    await Promise.all(Array.from({length: 6}, worker));
+    const first = !yt.fetchedAt;
+    yt.channels = channels;
+    yt.videos = videos.sort((a, b) => b.pub - a.pub);
+    const ids = new Set(videos.map(v => v.id)), seen = {};
+    for (const v of videos) if (yt.seen[v.id] || (first && v.pub < now() - 3 * DAY)) seen[v.id] = 1; // első betöltéskor csak az utolsó 3 nap új
+    yt.seen = seen; yt.fetchedAt = now(); ytSave();
+    if (byUser) toast('YouTube frissítve');
+  } catch(e) {
+    if (e.message === 'auth') { if (byUser) ytLogin(true); }
+    else toast(e.status === 403 ? 'A YouTube nem engedte (403) – nézd meg a Google beállítást' : 'Nem sikerült frissíteni a YouTube-ot');
+  }
+  ytBusy = false; $('#refreshBtn').classList.remove('spin'); render();
+}
+const ytVisible = () => yt.videos.filter(v => !yt.hidden[v.ch]);
+const ytNewCount = () => ytVisible().filter(v => !yt.seen[v.id]).length;
+function ytAgo(t){
+  const m = Math.round((now() - t) / 60e3);
+  if (m < 60) return `${Math.max(1, m)} perce`; if (m < 24 * 60) return `${Math.round(m / 60)} órája`;
+  return rel(t);
+}
+function renderYoutube(){
+  if (!ytClient()) return `
+    <div class="field"><b>YouTube bekötése</b>
+      <div class="small muted" style="margin:6px 0 10px">Ehhez egyszer létre kell hozni egy ingyenes Google-projektet. A végén kapsz egy <b>Client ID</b>-t (egy hosszú szöveg, ami így végződik: <i>.apps.googleusercontent.com</i>) – azt másold be ide.</div>
+      <input type="text" id="ytClientIn" placeholder="…apps.googleusercontent.com" autocomplete="off" autocapitalize="off" autocorrect="off">
+      <button class="btn block primary" data-act="ytSaveClient">Mentés</button></div>`;
+  if (!yt.fetchedAt) return `
+    <div class="empty"><b>YouTube feliratkozások</b>Jelentkezz be a Google-fiókoddal, és itt látod a feliratkozott csatornáid új videóit.</div>
+    <button class="btn block primary" data-act="ytLogin" ${ytBusy ? 'disabled' : ''}>${ytBusy ? 'Betöltés…' : 'Bejelentkezés Google-lel'}</button>
+    <button class="btn block" data-act="ytClientReset">Client ID módosítása</button>`;
+  const chName = Object.fromEntries(yt.channels.map(c => [c.id, c.title]));
+  const list = ytVisible().filter(v => !ytChan || v.ch === ytChan);
+  const fresh = list.filter(v => !yt.seen[v.id]), old = list.filter(v => yt.seen[v.id]).slice(0, 80);
+  const row = v => `<a class="yt-row${yt.seen[v.id] ? '' : ' new'}" href="https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}" target="_blank" rel="noopener" data-act="ytOpen" data-vid="${esc(v.id)}">
+      ${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
+      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || '')} · ${ytAgo(v.pub)}</div></div></a>`;
+  const opts = yt.channels.filter(c => !yt.hidden[c.id]).map(c => `<option value="${esc(c.id)}" ${c.id === ytChan ? 'selected' : ''}>${esc(c.title)}</option>`).join('');
+  return `
+    <div class="small muted" style="margin:2px 4px 10px">${yt.channels.length} feliratkozás · frissítve: ${ytAgo(yt.fetchedAt)}${ytToken() ? '' : ' · frissítéshez koppints a ⟳ gombra'}</div>
+    <select id="ytChanSel" style="margin-bottom:12px"><option value="">Minden csatorna</option>${opts}</select>
+    <div class="section-title" style="display:flex;align-items:center">Új videók (${fresh.length})
+      ${fresh.length ? '<button class="btn" style="margin-left:auto;text-transform:none;letter-spacing:0" data-act="ytAllSeen">Mind láttam</button>' : ''}</div>
+    ${fresh.length ? fresh.map(row).join('') : '<div class="small muted" style="padding:0 4px 6px">Nincs új videó.</div>'}
+    <div class="section-title">Korábbiak (utolsó 30 nap)</div>
+    ${old.length ? old.map(row).join('') : '<div class="small muted" style="padding:0 4px">Még nincs.</div>'}
+    <div class="section-title">Csatornák (${yt.channels.length})</div>
+    <div class="small muted" style="padding:0 4px 8px">Az elrejtett csatornák videói nem jelennek meg.</div>
+    ${yt.channels.map(c => `<div class="yt-ch">${c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
+      <div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${yt.hidden[c.id] ? ';opacity:.5' : ''}">${esc(c.title)}</div>
+      <button class="btn" data-act="ytHide" data-ch="${esc(c.id)}">${yt.hidden[c.id] ? 'Mutat' : 'Elrejt'}</button></div>`).join('')}
+    <button class="btn block danger" data-act="ytLogout">YouTube leválasztása</button>`;
+}
+
 /* ---------- renderelés ---------- */
 function render(){
   $('#title').textContent = TITLES[tab];
+  $('#addBtn').style.display = tab === 'youtube' ? 'none' : '';
+  const yb = $('#tabs [data-tab=youtube]'), yn = ytNewCount(); let ydot = yb.querySelector('.dot');
+  if (yn) { if (!ydot) { ydot = document.createElement('span'); ydot.className = 'dot'; yb.appendChild(ydot); } ydot.textContent = yn > 99 ? '99+' : yn; }
+  else if (ydot) ydot.remove();
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const n = state.shows.filter(sh => sh.status === 'nezem' && unwatchedAired(sh).length).length;
   const nb = $('#tabs [data-tab=nezem]'); let dot = nb.querySelector('.dot');
@@ -381,6 +516,8 @@ function render(){
   if (tab === 'nezem') m.innerHTML = renderNezem();
   else if (tab === 'tervezem') m.innerHTML = renderTervezem();
   else if (tab === 'kozelgo') m.innerHTML = renderKozelgo();
+  else if (tab === 'youtube') { m.innerHTML = renderYoutube();
+    const sel = $('#ytChanSel'); if (sel) sel.addEventListener('change', () => { ytChan = sel.value; render(); }); }
   else m.innerHTML = renderBeall();
   if (sheetState && sheetState.type === 'detail') renderDetail();
 }
@@ -913,7 +1050,9 @@ function icsFor(key){
 /* ---------- események ---------- */
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act],[data-tab]'); if (!el) return;
-  if (el.dataset.tab) { tab = el.dataset.tab; lsSet('sorozatmemoria.tab', tab); render(); window.scrollTo(0,0); return; }
+  if (el.dataset.tab) { tab = el.dataset.tab; lsSet('sorozatmemoria.tab', tab); render(); window.scrollTo(0,0);
+    if (tab === 'youtube' && ytToken() && now() - yt.fetchedAt > 30 * 60e3) ytRefresh(false);
+    return; }
   const id = el.dataset.id, sh = id && byId(id);
   switch (el.dataset.act) {
     case 'open': openSheet({type:'detail', id}); break;
@@ -934,6 +1073,18 @@ document.addEventListener('click', e => {
       if (sh.tvmazeId || sh.qid) (sh.qid ? fetchFilm(sh) : fetchShow(sh)).then(() => { save(); render(); if (sheetState) renderDetail(); }).catch(() => {}); break;
     case 'linkSearch': linkSearch(sh); break;
     case 'link': linkShow(sh, Number(el.dataset.tid)); break;
+    case 'ytSaveClient': { const v = ($('#ytClientIn').value || '').trim();
+      if (!/\.apps\.googleusercontent\.com$/.test(v)) { toast('Ez nem tűnik Client ID-nak'); break; }
+      lsSet('nezonaplo.ytClient', v); render(); break; }
+    case 'ytClientReset': lsSet('nezonaplo.ytClient', ''); render(); break;
+    case 'ytLogin': ytLogin(false); break;
+    case 'ytOpen': yt.seen[el.dataset.vid] = 1; ytSave(); setTimeout(render, 400); break; // a link megnyílik (YouTube app)
+    case 'ytAllSeen': ytVisible().filter(v => !ytChan || v.ch === ytChan).forEach(v => { yt.seen[v.id] = 1; }); ytSave(); render(); break;
+    case 'ytHide': { const c = el.dataset.ch; if (yt.hidden[c]) delete yt.hidden[c]; else yt.hidden[c] = 1; ytSave(); render();
+      if (!yt.hidden[c] && ytToken()) ytRefresh(false); break; }
+    case 'ytLogout': if (confirm('Leválasztod a YouTube-ot? A letöltött lista törlődik.')) {
+      const tok = ytToken(); if (tok) fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(tok), {method: 'POST'}).catch(() => {});
+      lsSet('nezonaplo.ytTok', ''); yt = {channels:[], videos:[], seen:{}, hidden:{}, fetchedAt:0}; ytSave(); render(); } break;
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;
     case 'refresh': refreshAll(true); break;
     case 'export': exportData(); break;
@@ -942,15 +1093,18 @@ document.addEventListener('click', e => {
   }
 });
 $('#addBtn').addEventListener('click', () => openSheet({type:'search'}));
-$('#refreshBtn').addEventListener('click', () => refreshAll(true));
+$('#refreshBtn').addEventListener('click', () => tab === 'youtube' ? ytRefresh(true) : refreshAll(true));
 $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
 $('#coverFile').addEventListener('change', e => { setCover(e.target.files[0]); e.target.value = ''; });
 $('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importData(f); e.target.value = ''; });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { render(); refreshAll(false); } });
 window.addEventListener('online', () => refreshAll(false));
 
+const ytBack = ytHandleRedirect();
 render();
 refreshAll(false);
+if (ytBack) ytRefresh(true);
+else if (tab === 'youtube' && ytToken() && now() - yt.fetchedAt > 30 * 60e3) ytRefresh(false);
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
