@@ -1,7 +1,7 @@
 // Nézőnapló service worker – offline indulás + borítóképek cache
-const VERSION = 'sm-v8';
+const VERSION = 'sm-v9';
 const IMG = 'sm-img';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './hu-shows.json'];
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './hu-shows.json', './upcoming.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)));
