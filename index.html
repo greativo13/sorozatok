@@ -319,6 +319,28 @@ async function fetchShow(sh){
   state.lastRefresh = now();
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- magyar műsorok (hu-shows.json) ----------
+   A TVmaze keresője csak 10 találatot ad, így pl. a "Most Wanted" magyar
+   változatát kiszorítják az amerikai műsorok. Ezért a magyar műsorokat
+   egy előre kigyűjtött listából is keressük, és ezek kerülnek előre. */
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+async function huShows(){
+  if (!huShows.p) huShows.p = fetch('hu-shows.json').then(r => r.json())
+    .then(list => list.map(s => Object.assign(s, {_n: norm(s.name)})))
+    .catch(() => { huShows.p = null; return []; });
+  return huShows.p;
+}
+// TVmaze-szerű objektum, hogy a többi kód (slimShow, hozzáadás) ugyanúgy kezelje
+const huAsShow = s => ({id:s.id, name:s.name, status:s.status, premiered:s.premiered,
+  network:{name:s.network, country:{code:'HU'}}, image:s.image ? {medium:s.image} : null, genres:[]});
+const huLive = s => s.status === 'Running' || s.status === 'To Be Determined' || s.status === 'In Development';
+function huMatch(list, text){
+  const q = norm(text), words = q.split(' ').filter(Boolean);
+  if (!words.length) return [];
+  return list.filter(s => words.every(w => s._n.includes(w)))
+    .sort((a, b) => (b._n.startsWith(q) - a._n.startsWith(q)) || (huLive(b) - huLive(a)) || String(b.premiered || '').localeCompare(String(a.premiered || '')));
+}
 async function refreshAll(force){
   if (refreshing) return;
   const list = state.shows.filter(sh => (sh.tvmazeId || (sh.qid && sh.status === 'tervezem')) && sh.status !== 'abbahagytam' && (force || !sh.cache || now() - sh.cache.fetchedAt > STALE));
@@ -545,33 +567,52 @@ function renderSearch(){
   });
   q.addEventListener('input', () => { clearTimeout(renderSearch.t); renderSearch.t = setTimeout(() => doSearch(q.value), 350); });
   setTimeout(() => q.focus(), 50);
+  doSearch('');
 }
 async function doSearch(text){
   const box = $('#results'); if (!box) return;
   text = text.trim();
+  const stale = () => !$('#results') || $('#q').value.trim() !== text || searchKind !== 'sorozat';
+  if (searchKind === 'sorozat' && text.length < 2) {
+    // üres keresőnél: most futó magyar műsorok
+    const hu = (await huShows()).filter(s => s.status === 'Running').sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    if (stale()) return;
+    doSearch.cache = hu.map(huAsShow);
+    box.innerHTML = hu.length ? `<div class="muted small" style="padding:4px 2px 8px">Most futó magyar műsorok</div>` + doSearch.cache.map(showRow).join('') : '';
+    return;
+  }
   if (text.length < 2) { box.innerHTML = ''; return; }
   box.innerHTML = '<div class="muted small" style="padding:8px">Keresés…</div>';
   if (searchKind === 'film') return searchFilms(text);
+  const local = huMatch(await huShows(), text).slice(0, 8).map(huAsShow);
+  let remote = null;
   try {
     const r = await fetch(`${API}/search/shows?q=${encodeURIComponent(text)}`);
-    const list = await r.json();
-    if (!$('#results') || $('#q').value.trim() !== text || searchKind !== 'sorozat') return;
-    doSearch.cache = list.map(x => x.show);
-    if (!list.length) { box.innerHTML = '<div class="muted small" style="padding:8px">Nincs találat.</div>'; return; }
-    box.innerHTML = list.slice(0, 12).map(({show}) => {
-      const have = state.shows.find(sh => sh.tvmazeId === show.id);
-      const s = slimShow(show);
-      const year = show.premiered ? show.premiered.slice(0,4) : '';
-      const sub = [year, s.meta.network, STATUS_HU[show.status]].filter(Boolean).join(' · ');
-      return `<div class="result">${posterHtml({image:s.image, name:show.name})}
-        <div class="body" style="flex:1;min-width:0"><div class="name" style="font-weight:700">${esc(show.name)}</div><div class="sub muted small">${esc(sub)}</div></div>
-        <div class="acts">${have ? '<span class="small muted">Már a listádon</span>' :
-          `<button class="btn primary" data-act="add" data-tid="${show.id}" data-st="nezem">Nézem</button>
-           <button class="btn" data-act="add" data-tid="${show.id}" data-st="tervezem">Tervezem</button>`}</div></div>`;
-    }).join('');
-  } catch(e) {
-    box.innerHTML = '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>';
+    remote = (await r.json()).map(x => x.show);
+  } catch(e) {}
+  if (stale()) return;
+  // magyar találatok előre, utánuk a többi (ismétlés nélkül)
+  const isHu = s => ((s.network || s.webChannel || {}).country || {}).code === 'HU';
+  const rest = (remote || []).filter(s => !local.some(l => l.id === s.id));
+  const list = [...local, ...rest.filter(isHu), ...rest.filter(s => !isHu(s))];
+  doSearch.cache = list;
+  if (!list.length) {
+    box.innerHTML = remote ? '<div class="muted small" style="padding:8px">Nincs találat.</div>'
+      : '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>';
+    return;
   }
+  box.innerHTML = list.slice(0, 14).map(showRow).join('');
+}
+function showRow(show){
+  const have = state.shows.find(sh => sh.tvmazeId === show.id);
+  const s = slimShow(show);
+  const year = show.premiered ? show.premiered.slice(0,4) : '';
+  const sub = [year, s.meta.network, STATUS_HU[show.status]].filter(Boolean).join(' · ');
+  return `<div class="result">${posterHtml({image:s.image, name:show.name})}
+    <div class="body" style="flex:1;min-width:0"><div class="name" style="font-weight:700">${esc(show.name)}</div><div class="sub muted small">${esc(sub)}</div></div>
+    <div class="acts">${have ? '<span class="small muted">Már a listádon</span>' :
+      `<button class="btn primary" data-act="add" data-tid="${show.id}" data-st="nezem">Nézem</button>
+       <button class="btn" data-act="add" data-tid="${show.id}" data-st="tervezem">Tervezem</button>`}</div></div>`;
 }
 async function searchFilms(text){
   const box = $('#results');

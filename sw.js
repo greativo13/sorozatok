@@ -1,7 +1,7 @@
 // Sorozatmemória service worker – offline indulás + borítóképek cache
-const VERSION = 'sm-v2';
+const VERSION = 'sm-v3';
 const IMG = 'sm-img';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './hu-shows.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)));

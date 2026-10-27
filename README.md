@@ -31,3 +31,9 @@ A sorozatadatokat a [TVmaze](https://www.tvmaze.com), a filmadatokat a [Wikidata
 ## Frissítés
 
 Ha módosítod az `index.html`-t, töltsd fel újra ugyanígy a repóba. Az app a következő megnyitáskor (netkapcsolattal) frissül.
+
+## Magyar műsorok listája
+
+A `hu-shows.json` a TVmaze-en szereplő összes magyar műsort tartalmazza. Az alkalmazás ebből keres először, így a magyar műsorok (pl. *Most Wanted – A hajsza*) akkor is előre kerülnek, ha sok külföldi műsornak hasonló a címe. Az üres keresőnél a most futó magyar műsorok jelennek meg.
+
+Frissítés (néhány havonta érdemes): `python3 scripts/hu_shows.py`, majd a `sw.js` fájlban a `VERSION` értékét kell növelni.
