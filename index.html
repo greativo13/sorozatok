@@ -234,7 +234,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '27';
+const APP_VER = '28';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -371,6 +371,12 @@ function epDelta(sh, s1, n1, s2, n2){
   if (s2 === s1) return n2 - n1;
   return s2 > s1 ? n2 : 0;
 }
+// ha most fejeztél be egy (teljesen kijött) évadot, kérjük az értékelést
+function checkSeasonEnd(sh){
+  const inS = eps(sh).filter(e => e.s === sh.lastSeason);
+  if (inS.length < 2 || inS.some(e => after(e, sh.lastSeason, sh.lastEpisode))) return;
+  if (!(sh.seasonRatings || {})[sh.lastSeason]) sh.rateSeason = sh.lastSeason;
+}
 function setProgress(sh, s, n, count){
   const k = epDelta(sh, sh.lastSeason, sh.lastEpisode, s, n);
   sh.lastSeason = s; sh.lastEpisode = n; delete sh.needPos;
@@ -379,6 +385,7 @@ function setProgress(sh, s, n, count){
   if (count === 'ask' && k > 3 && !confirm(`${k} részt jelöltél megnézettnek.\n\nEzeket most nézted meg?\nOK = beszámít a statisztikába\nMégse = csak beállítom, hol tartok`)) return;
   if (count === 'ask' && k < 0) count = true; // visszalépés: javítjuk a számlálót
   if (!count) return;
+  if (k > 0) { sh.watchedAt = now(); checkSeasonEnd(sh); }
   const y = new Date().getFullYear();
   state.stats = state.stats || {}; if (!state.statsSince) state.statsSince = now();
   const st = state.stats[y] = state.stats[y] || {eps: 0, shows: {}};
@@ -888,6 +895,10 @@ const az = n => /^[aáeéiíoóöőuúüű]/i.test(String(n).trim()) ? 'az' : 'a
 function promptsHtml(){
   const out = [];
   for (const sh of state.shows) {
+    if (sh.rateSeason && !(sh.seasonRatings || {})[sh.rateSeason]) out.push(`<div class="field ask">${posterHtml(sh)}<div style="flex:1;min-width:0">
+      <div class="small" style="line-height:1.35">🎉 Végeztél ${az(sh.name)} <b>${esc(sh.name)}</b> ${sh.rateSeason}. évadával! Milyen volt?</div>
+      <div class="stars" style="margin-top:6px">${[1,2,3,4,5].map(n => `<button data-act="rateSeason" data-id="${sh.id}" data-v="${n}" aria-label="${n} csillag">★</button>`).join('')}</div>
+      <button class="btn" style="margin-top:6px;padding:7px 10px" data-act="rateSkip" data-id="${sh.id}">Kihagyom</button></div></div>`);
     if (sh.needPos && sh.status === 'nezem' && unwatchedAired(sh).length > 1) out.push(`<div class="field ask">${posterHtml(sh)}<div style="flex:1;min-width:0">
       <div class="small" style="line-height:1.35">Hol tartasz ${az(sh.name)} <b>${esc(sh.name)}</b> sorozatban? (${unwatchedAired(sh).length} rész jött ki eddig)</div>
       <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn primary" data-act="posUp" data-id="${sh.id}">Naprakész vagyok</button><button class="btn" data-act="posStart" data-id="${sh.id}">Elejéről kezdem</button></div>
@@ -947,7 +958,7 @@ function renderNezem(){
   if (!list.length) return promptsHtml() + bannerHtml() + recBtn() + `<div class="empty"><b>Még nincs itt semmi</b>Nyomd meg a <b style="display:inline;color:var(--accent)">+</b> gombot, és add hozzá a sorozatot, amit épp nézel.</div>`;
   const key = sh => {
     const ua = unwatchedAired(sh).length;
-    if (ua) return [0, -ua];
+    if (ua) return [0, -(sh.watchedAt || 0) || -ua];  // akit mostanában néztél, az elöl
     const x = nextInfo(sh); if (x) return [1, x.d];
     return [2, 0];
   };
@@ -1249,37 +1260,67 @@ function showRow(show){
       `<button class="btn primary" data-act="add" data-tid="${show.id}" data-st="nezem">Nézem</button>
        <button class="btn" data-act="add" data-tid="${show.id}" data-st="tervezem">Tervezem</button>`}</div></div>`;
 }
+// filmkeresés: Wikidata (magyar premierdátum, folytatások) + TMDB párhuzamosan (tartalék, szebb plakát, magyar cím)
 async function searchFilms(text){
   const box = $('#results');
-  try {
+  const stale = () => !$('#results') || $('#q').value.trim() !== text || searchKind !== 'film';
+  const wdP = (async () => {
     const s = await (await fetch(`${WD}?action=query&list=search&srsearch=${encodeURIComponent(text.replace(/[:"()\[\]~*?\\!-]/g, ' ') + ' ' + FILM_TYPES)}&srlimit=12&format=json&origin=*`)).json();
     const ids = ((s.query && s.query.search) || []).map(x => x.title);
-    if (!$('#results') || $('#q').value.trim() !== text || searchKind !== 'film') return;
-    if (!ids.length) { box.innerHTML = '<div class="muted small" style="padding:8px">Nincs találat. Próbáld angol címmel, vagy add hozzá kézzel.</div>'; return; }
+    if (!ids.length) return [];
     const ents = await wdEntities(ids);
-    if (!$('#results') || $('#q').value.trim() !== text || searchKind !== 'film') return;
-    const films = ids.map(id => ents[id] && Object.assign({qid: id}, parseFilm(ents[id]))).filter(Boolean);
-    searchFilms.cache = films;
-    box.innerHTML = films.map(f => {
-      const have = state.shows.find(sh => sh.qid === f.qid);
-      const fd = filmDate(f);
-      const when = fd ? (fd.d > now() ? 'Várható: ' + fmtFilmDate(fd) : new Date(f.meta.release).getFullYear()) : '';
-      const sub = [when, f.meta.orig && f.meta.orig !== f.name ? f.meta.orig : '', f.meta.desc].filter(Boolean).join(' · ');
-      return `<div class="result">${posterHtml(f)}
-        <div class="body" style="flex:1;min-width:0"><div class="name" style="font-weight:700">${esc(f.name)}</div><div class="sub muted small">${esc(sub)}</div></div>
-        <div class="acts">${have ? '<span class="small muted">Már a listádon</span>' :
-          `<button class="btn primary" data-act="addFilm" data-qid="${f.qid}" data-st="tervezem">Megnézném</button>
-           <button class="btn" data-act="addFilm" data-qid="${f.qid}" data-st="lattam">Láttam</button>`}</div></div>`;
-    }).join('');
-  } catch(e) {
-    box.innerHTML = '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>';
-  }
+    return ids.map(id => ents[id] && Object.assign({qid: id}, parseFilm(ents[id]))).filter(Boolean);
+  })().catch(() => null);
+  const tmP = tmdbKey() ? tmdbGet('/search/movie', {query: text, language: 'hu-HU', region: 'HU'}).then(j => (j.results || []).slice(0, 10)).catch(() => null) : Promise.resolve(null);
+  const [films, tm] = await Promise.all([wdP, tmP]);
+  if (stale()) return;
+  if (!films && !tm) { box.innerHTML = '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>'; return; }
+  searchFilms.cache = films || [];
+  const wdTm = new Set((films || []).map(f => String(f.meta.tmdbId || '')).filter(Boolean));
+  const extra = (tm || []).filter(r => !wdTm.has(String(r.id)) && (r.poster_path || r.release_date));
+  searchFilms.tmdb = extra;
+  if (!(films || []).length && !extra.length) { box.innerHTML = '<div class="muted small" style="padding:8px">Nincs találat. Próbáld angol címmel, vagy add hozzá kézzel.</div>'; return; }
+  const ownT = ownTmdb();
+  const wdHtml = (films || []).map(f => {
+    const have = state.shows.find(sh => sh.qid === f.qid);
+    const fd = filmDate(f);
+    const when = fd ? (fd.d > now() ? 'Várható: ' + fmtFilmDate(fd) : new Date(f.meta.release).getFullYear()) : '';
+    const sub = [when, f.meta.orig && f.meta.orig !== f.name ? f.meta.orig : '', f.meta.desc].filter(Boolean).join(' · ');
+    return `<div class="result">${posterHtml(f)}
+      <div class="body" style="flex:1;min-width:0"><div class="name" style="font-weight:700">${esc(f.name)}</div><div class="sub muted small">${esc(sub)}</div></div>
+      <div class="acts">${have ? '<span class="small muted">Már a listádon</span>' :
+        `<button class="btn primary" data-act="addFilm" data-qid="${f.qid}" data-st="tervezem">Megnézném</button>
+         <button class="btn" data-act="addFilm" data-qid="${f.qid}" data-st="lattam">Láttam</button>`}</div></div>`;
+  }).join('');
+  const tmHtml = extra.map(r => {
+    const have = ownT.has('movie:' + r.id);
+    const y = (r.release_date || '').slice(0, 4), future = r.release_date && Date.parse(r.release_date) > now();
+    const sub = [future ? 'Várható: ' + fmtDate(Date.parse(r.release_date + 'T12:00:00')) : y, r.original_title && r.original_title !== r.title ? r.original_title : ''].filter(Boolean).join(' · ');
+    return `<div class="result">${posterHtml({image: r.poster_path ? 'https://image.tmdb.org/t/p/w185' + r.poster_path : null, name: r.title})}
+      <div class="body" style="flex:1;min-width:0"><div class="name" style="font-weight:700">${esc(r.title)}</div><div class="sub muted small">${esc(sub)}</div></div>
+      <div class="acts">${have ? '<span class="small muted">Már a listádon</span>' :
+        `<button class="btn primary" data-act="addTmdbFilm" data-tm="${r.id}" data-st="tervezem">Megnézném</button>
+         <button class="btn" data-act="addTmdbFilm" data-tm="${r.id}" data-st="lattam">Láttam</button>`}</div></div>`;
+  }).join('');
+  box.innerHTML = wdHtml + (tmHtml ? (wdHtml ? '<div class="section-title">További találatok (TMDB)</div>' : '') + tmHtml : '');
+}
+// film felvétele TMDB-adatokból (kereső tartalék és ajánló)
+async function addTmdbFilm(id, status, base){
+  if (ownTmdb().has('movie:' + id)) return;
+  const d = await tmdbGet(`/movie/${id}`, {language: 'hu-HU'});
+  const G = Object.fromEntries(Object.entries(GM).map(([n, gid]) => [gid, n]));
+  const name = (base && base.name) || d.title;
+  state.shows.push({id: uid(), kind: 'film', qid: null, tmdb: {type: 'movie', id: +id}, name,
+    image: (base && base.poster) || (d.poster_path ? 'https://image.tmdb.org/t/p/w342' + d.poster_path : null),
+    meta: {orig: d.original_title, desc: '', genres: (d.genres || []).map(g => G[g.id]).filter(Boolean), release: d.release_date ? Date.parse(d.release_date + 'T12:00:00') : null, prec: 11, tmdbId: +id, imdb: d.imdb_id || null},
+    status, lastSeason: 0, lastEpisode: 0, notes: '', manualNext: null, added: now(), seenAt: status === 'lattam' ? now() : null, seenOld: status === 'lattam', cache: {fetchedAt: now()}});
+  save(); toast(`${name} → ${status === 'lattam' ? 'megnézett filmek' : 'Tervezem'}`);
 }
 function addFilm(qid, status){
   const f = (searchFilms.cache || []).find(x => x.qid === qid);
   if (!f || state.shows.some(sh => sh.qid === qid)) return;
   state.shows.push({id:uid(), kind:'film', qid, tvmazeId:null, name:f.name, image:f.image, meta:f.meta, status,
-    lastSeason:0, lastEpisode:0, notes:'', manualNext:null, added:now(), seenAt: status === 'lattam' ? now() : null, cache:{fetchedAt:now()}});
+    lastSeason:0, lastEpisode:0, notes:'', manualNext:null, added:now(), seenAt: status === 'lattam' ? now() : null, seenOld: status === 'lattam', cache:{fetchedAt:now()}});
   save(); render();
   toast(status === 'lattam' ? `${f.name} → megnézett filmek` : `${f.name} → Tervezem`);
   doSearch($('#q').value);
@@ -1324,12 +1365,26 @@ function saveManual(){
 }
 
 let moreOpen = false;
+function bindName(sh){
+  const n = $('#dName'); if (!n) return;
+  n.addEventListener('change', () => { const v = n.value.trim(); if (!v || v === sh.name) return; sh.name = v; sh.customName = true; save(); render(); toast('Cím elmentve'); });
+  n.addEventListener('blur', () => setTimeout(render, 0));
+}
+async function nameReset(sh){
+  sh.customName = false; sh.keepOrig = true; // a magyar TMDB-cím se írja felül
+  try {
+    if (sh.tvmazeId) await fetchShow(sh);
+    else if (sh.qid) { const e = (await wdEntities([sh.qid]))[sh.qid]; if (e) sh.name = parseFilm(e).name; }
+    else if (sh.tmdb) { const d = await tmdbGet(`/${sh.tmdb.type}/${sh.tmdb.id}`, {language: 'hu-HU'}); sh.name = d.title || d.name || sh.name; }
+  } catch(e) {}
+  save(); render(); toast('Eredeti cím visszaállítva');
+}
 document.addEventListener('toggle', e => { const t = e.target; if (!t.classList || !t.classList.contains('more')) return; if (t.dataset.g) grpOpen[t.dataset.g] = t.open; else moreOpen = t.open; }, true);
 function renderDetail(){
   const sh = byId(sheetState.id); if (!sh) { closeSheet(); return; }
   const sheet = $('#sheet');
   const active = document.activeElement && sheet.contains(document.activeElement) ? document.activeElement.id : null;
-  if (active === 'dNotes' || active === 'dLabel') return; // ne írjuk felül gépelés közben
+  if (active === 'dNotes' || active === 'dLabel' || active === 'dName') return; // ne írjuk felül gépelés közben
   if (isFilm(sh)) return renderFilmDetail(sh);
   const all = eps(sh);
   const nx = nextInfo(sh);
@@ -1372,6 +1427,8 @@ function renderDetail(){
     ${starsHtml(sh)}
     <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. HBO Max-on van">${esc(sh.notes)}</textarea></div>
     <details class="more" ${moreOpen ? 'open' : ''}><summary>További beállítások</summary>
+    <div class="field"><label>Cím</label><input type="text" id="dName" value="${esc(sh.name)}">
+      ${sh.customName ? `<button class="btn block" style="padding:9px" data-act="nameReset" data-id="${sh.id}">Eredeti cím visszaállítása</button>` : ''}</div>
     ${sh.tvmazeId ? `<div class="field"><label>Streamingen előrébb jár? (pl. RTL+ Premium, TV2 Play Prémium)</label>
       <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>
     <div class="field"><label>Magyarországon később jelenik meg?</label>
@@ -1400,6 +1457,7 @@ function renderDetail(){
   $('#dWk').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; b.classList.toggle('on'); saveSched(); });
   $('#dTime').addEventListener('change', saveSched);
   if ($('#dForce')) $('#dForce').addEventListener('change', saveSched);
+  bindName(sh);
   const dl = $('#dDelay'); if (dl) dl.addEventListener('change', () => { sh.huDelay = parseInt(dl.value) || 0; save(); render(); });
   const ah = $('#dAhead'); if (ah) ah.addEventListener('change', () => { sh.ahead = parseInt(ah.value) || 0; save(); render(); });
   const prog = $('#dProg');
@@ -1437,12 +1495,15 @@ function renderFilmDetail(sh){
     ${sh.status === 'lattam' ? starsHtml(sh) : ''}
     <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. Peti ajánlotta, Max-on van">${esc(sh.notes)}</textarea></div>
     <details class="more" ${moreOpen ? 'open' : ''}><summary>További beállítások</summary>
+    <div class="field"><label>Cím</label><input type="text" id="dName" value="${esc(sh.name)}">
+      ${sh.customName ? `<button class="btn block" style="padding:9px" data-act="nameReset" data-id="${sh.id}">Eredeti cím visszaállítása</button>` : ''}</div>
     <div class="field"><label>Saját emlékeztető (pl. mikor kerül streamingre)</label>
       <input type="date" id="dDate" value="${sh.manualNext ? esc(sh.manualNext.date) : ''}">
       <input type="text" id="dLabel" placeholder="pl. Netflixre kerül" value="${sh.manualNext ? esc(sh.manualNext.label) : ''}" style="margin-top:8px"></div>
     ${sh.qid ? `<button class="btn block" data-act="refreshOne" data-id="${sh.id}">Adatok frissítése</button>` : ''}
     ${sh.customImage ? `<button class="btn block" data-act="coverReset" data-id="${sh.id}">Saját borító törlése</button>` : ''}
     <button class="btn block danger" data-act="delete" data-id="${sh.id}">Törlés</button></details>`;
+  bindName(sh);
   $('#dSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.v === 'lattam' && sh.status !== 'lattam') markFilmSeen(sh); else sh.status = b.dataset.v; save(); render(); if (sh.status === 'lattam') sequelCheck(sh); });
   const saveManualNext = () => { const d = $('#dDate').value; sh.manualNext = d ? {date:d, label:$('#dLabel').value.trim()} : null; save(); };
@@ -1498,7 +1559,7 @@ async function tmdbLoad(sh, force){
       flat: provList(hu.flatrate), free: provList([...(hu.free || []), ...(hu.ads || [])]), rent: provList(hu.rent), buy: provList(hu.buy)};
     // magyar sorozatcím, ha van fordítás (és nem írtad át)
     const huName = det.name || det.title, orig = det.original_name || det.original_title;
-    if (!isFilm(sh) && !sh.customName && sh.id && huName && huName !== orig && huName !== sh.name) { sh.name = huName; sh.customName = true; }
+    if (!isFilm(sh) && !sh.customName && !sh.keepOrig && sh.id && huName && huName !== orig && huName !== sh.name) { sh.name = huName; sh.customName = true; }
     save(); return true;
   } catch(e) { if (e.status === 401) toast('Hibás TMDB-kulcs'); return false; }
   finally { delete sh.loading; }
@@ -1633,12 +1694,7 @@ async function recAdd(k, status){
   const it = recFind(k); if (!it) return;
   try {
     if (it.type === 'movie') {
-      const d = await tmdbGet(`/movie/${it.id}`, {language: 'hu-HU'});
-      const G = Object.fromEntries(Object.entries(GM).map(([n, id]) => [id, n]));
-      state.shows.push({id: uid(), kind: 'film', qid: null, tmdb: {type: 'movie', id: it.id}, name: it.name, image: it.poster,
-        meta: {orig: it.orig, desc: '', genres: (d.genres || []).map(g => G[g.id]).filter(Boolean), release: d.release_date ? Date.parse(d.release_date + 'T12:00:00') : null, prec: 11, tmdbId: it.id, imdb: d.imdb_id || null},
-        status, lastSeason: 0, lastEpisode: 0, notes: '', manualNext: null, added: now(), seenAt: status === 'lattam' ? now() : null, seenOld: status === 'lattam', cache: {fetchedAt: now()}});
-      save(); toast(`${it.name} → ${status === 'lattam' ? 'megnézett filmek' : 'Tervezem'}`);
+      await addTmdbFilm(it.id, status, it);
     } else {
       const ex = await tmdbGet(`/tv/${it.id}/external_ids`);
       let r = ex.imdb_id ? await fetch(`${API}/lookup/shows?imdb=${ex.imdb_id}`) : null;
@@ -1656,7 +1712,8 @@ async function recAdd(k, status){
 
 /* ---------- értékelés ---------- */
 function starsHtml(sh){
-  return `<div class="field"><label>Értékelésed</label><div class="stars">${[1,2,3,4,5].map(n =>
+  const sr = Object.entries(sh.seasonRatings || {}).filter(([, v]) => v > 0);
+  return `<div class="field"><label>Értékelésed${sr.length ? ` <span style="font-weight:500">(évadok: ${sr.map(([s, v]) => `${s}. ${v}★`).join(', ')})</span>` : ''}</label><div class="stars">${[1,2,3,4,5].map(n =>
     `<button data-act="rate" data-id="${sh.id}" data-v="${n}" class="${(sh.rating || 0) >= n ? 'on' : ''}" aria-label="${n} csillag">★</button>`).join('')}</div></div>`;
 }
 const starsTxt = r => r ? '★'.repeat(r) + '☆'.repeat(5 - r) : '';
@@ -2036,6 +2093,7 @@ document.addEventListener('click', e => {
     case 'saveManual': saveManual(); break;
     case 'add': addFromSearch(Number(el.dataset.tid), el.dataset.st); break;
     case 'addFilm': addFilm(el.dataset.qid, el.dataset.st); break;
+    case 'addTmdbFilm': addTmdbFilm(+el.dataset.tm, el.dataset.st).then(() => { render(); doSearch($('#q').value); }).catch(() => toast('Nem sikerült hozzáadni')); break;
     case 'seen': e.stopPropagation(); markFilmSeen(sh); save(); render(); toast(`${sh.name} → megnézett filmek`); sequelCheck(sh); break;
     case 'finish': e.stopPropagation(); sh.status = 'befejeztem'; save(); render(); toast(`${sh.name} befejezve – szólok, ha új évad jön`); break;
     case 'posUp': { const ua = unwatchedAired(sh), l = ua[ua.length - 1]; if (l) setProgress(sh, l.s, l.n, false); delete sh.needPos; save(); render(); toast('Naprakész – szólok, ha új rész jön'); break; }
@@ -2104,6 +2162,11 @@ document.addEventListener('click', e => {
     case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); if (sheetState && sheetState.type === 'disc') closeSheet(); break;
     case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); if (sheetState && sheetState.type === 'disc') renderDiscDetail(); break;
     case 'discShowHidden': showHiddenDisc = !showHiddenDisc; render(); break;
+    case 'rateSeason': { sh.seasonRatings = sh.seasonRatings || {}; sh.seasonRatings[sh.rateSeason] = +el.dataset.v;
+      const r = Object.values(sh.seasonRatings); sh.rating = Math.round(r.reduce((a, b) => a + b, 0) / r.length);
+      delete sh.rateSeason; save(); render(); toast('Köszi, elmentve ★'); break; }
+    case 'rateSkip': sh.seasonRatings = sh.seasonRatings || {}; sh.seasonRatings[sh.rateSeason] = 0; delete sh.rateSeason; save(); render(); break;
+    case 'nameReset': nameReset(sh); break;
     case 'rate': { const v = +el.dataset.v; sh.rating = sh.rating === v ? 0 : v; save(); render(); break; }
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;
     case 'refresh': refreshAll(true); break;
