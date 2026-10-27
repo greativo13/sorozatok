@@ -202,6 +202,9 @@ main{overflow-x:clip}
 .rec-btn>span:first-child{font-size:28px}
 .pchip{background:var(--surface2);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted)}
 .pchip.on{background:var(--accent);color:#fff}
+.chiprow{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 10px;padding:2px 16px;scrollbar-width:none}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow .pchip{flex:none}
 .cover-btn{position:relative;flex:none}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
   display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
@@ -231,7 +234,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '24';
+const APP_VER = '25';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1512,7 +1515,13 @@ function provHtml(sh){
 const descHtml = sh => sh.tmdbInfo && sh.tmdbInfo.overview ? `<div class="field"><label>Leírás</label><div class="small" style="line-height:1.45">${esc(sh.tmdbInfo.overview)}</div></div>` : '';
 const provShort = sh => sh.tmdbInfo && sh.tmdbInfo.flat && sh.tmdbInfo.flat.length ? sh.tmdbInfo.flat.slice(0, 2).map(p => p.n).join(', ') : '';
 
-/* ---------- "Mit nézzek?" – ajánló a már elérhető tartalmakból (TMDB) ---------- */
+/* ---------- műfajszűrő címkék (Felfedezés és Mit nézzek?) ---------- */
+const lsArr = k => { try { return JSON.parse(lsGet(k)) || []; } catch(e) { return []; } };
+const genreChips = (all, sel, act) => all.length ? `<div class="chiprow">${sel.length ? `<button class="pchip" data-act="${act}" data-v="">✕ Mind</button>` : ''}${all.map(g =>
+  `<button class="pchip ${sel.includes(g) ? 'on' : ''}" data-act="${act}" data-v="${esc(g)}">${esc(GENRE_HU[g] || g)}</button>`).join('')}</div>` : '';
+const toggleIn = (arr, v) => !v ? [] : arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v];
+
+/* ---------- "Mit nézzek?\" – ajánló a már elérhető tartalmakból (TMDB) ---------- */
 const PROVS = [[8,'Netflix'],[1899,'HBO Max'],[337,'Disney+'],[119,'Prime Video'],[350,'Apple TV'],[1773,'SkyShowtime'],[283,'Crunchyroll']];
 // a mi műfajneveink -> TMDB műfaj-azonosítók (film / sorozat)
 const GM = {Action:28, Adventure:12, Animation:16, Anime:16, Comedy:35, Crime:80, Documentary:99, Drama:18, Family:10751, Fantasy:14,
@@ -1523,18 +1532,22 @@ let recKind = lsGet('nezonaplo.recKind') || 'movie', recCache = {}, recSel = nul
 const myProvs = () => { try { return JSON.parse(lsGet('nezonaplo.provs')) || []; } catch(e) { return []; } };
 let recHidden = (() => { try { return JSON.parse(lsGet('nezonaplo.recHidden')) || {}; } catch(e) { return {}; } })();
 const ownTmdb = () => new Set(state.shows.map(sh => sh.tmdb ? sh.tmdb.type + ':' + sh.tmdb.id : (sh.meta && sh.meta.tmdbId ? 'movie:' + sh.meta.tmdbId : '')).filter(Boolean));
-const recItem = (type, r) => ({type, id: r.id, name: r.title || r.name, orig: r.original_title || r.original_name, poster: r.poster_path ? 'https://image.tmdb.org/t/p/w342' + r.poster_path : null,
+const recItem = (type, r) => ({type, id: r.id, gids: r.genre_ids || [], name: r.title || r.name, orig: r.original_title || r.original_name, poster: r.poster_path ? 'https://image.tmdb.org/t/p/w342' + r.poster_path : null,
   vote: r.vote_average, year: (r.release_date || r.first_air_date || '').slice(0, 4), overview: r.overview || ''});
 async function provsFor(type, id){
   const j = await tmdbGet(`/${type}/${id}/watch/providers`), hu = (j.results || {}).HU || {};
   return [...(hu.flatrate || []), ...(hu.free || []), ...(hu.ads || [])].map(p => ({id: p.provider_id, n: p.provider_name, l: p.logo_path}));
 }
 async function loadRecs(type){
-  const mine = myProvs(), own = ownTmdb(), prof = [...genreProfile()];
+  const mine = myProvs(), own = ownTmdb(), sel = lsArr('nezonaplo.recGenres');
+  const prof = sel.length ? sel : [...genreProfile()];
+  const gmap0 = type === 'movie' ? GM : GT, selIds = sel.map(g => gmap0[g]).filter(Boolean);
+  const okG = it => !selIds.length || (it.gids || []).some(id => selIds.includes(id));
   const out = {list: [], because: null, fav: []};
   // 1) a Tervezem listáról, ami most nézhető (a szolgáltatóidon)
   out.list = state.shows.filter(sh => sh.status === 'tervezem' && (type === 'movie') === isFilm(sh) && sh.tmdbInfo && sh.tmdbInfo.flat && sh.tmdbInfo.flat.length
-    && (!mine.length || sh.tmdbInfo.flat.some(p => p.id ? mine.includes(p.id) : true)));
+    && (!mine.length || sh.tmdbInfo.flat.some(p => p.id ? mine.includes(p.id) : true))
+    && (!sel.length || ((sh.meta || {}).genres || []).some(g => sel.includes(g))));
   const skip = r => own.has(type + ':' + r.id) || recHidden[type + ':' + r.id];
   // 2) "Mert tetszett": a legjobbra értékelt hasonlók, amik elérhetők
   const best = state.shows.filter(sh => sh.rating >= 4 && (type === 'movie') === isFilm(sh) && sh.tmdb).sort((a, b) => b.rating - a.rating || (b.seenAt || 0) - (a.seenAt || 0))[0];
@@ -1544,11 +1557,11 @@ async function loadRecs(type){
       const cand = (j.results || []).filter(r => !skip(r)).slice(0, 14);
       const pv = await Promise.all(cand.map(r => provsFor(type, r.id).catch(() => [])));
       out.because = {name: best.name, items: cand.map((r, i) => Object.assign(recItem(type, r), {provs: pv[i]}))
-        .filter(it => it.provs.length && (!mine.length || it.provs.some(p => mine.includes(p.id)))).slice(0, 8)};
+        .filter(it => okG(it) && it.provs.length && (!mine.length || it.provs.some(p => mine.includes(p.id)))).slice(0, 8)};
     } catch(e) {}
   }
   // 3) népszerű a kedvenc műfajaidban, a szolgáltatóidon
-  const gmap = type === 'movie' ? GM : GT, gids = [...new Set(prof.map(g => gmap[g]).filter(Boolean))];
+  const gmap = gmap0, gids = [...new Set(prof.map(g => gmap[g]).filter(Boolean))];
   const params = {watch_region: 'HU', with_watch_monetization_types: 'flatrate|free|ads', sort_by: 'popularity.desc', language: 'hu-HU',
     'vote_count.gte': type === 'movie' ? '300' : '100'};
   if (mine.length) params.with_watch_providers = mine.join('|');
@@ -1556,7 +1569,7 @@ async function loadRecs(type){
   const pages = await Promise.all([1, 2].map(pg => tmdbGet(`/discover/${type}`, Object.assign({page: String(pg)}, params)).catch(() => ({results: []}))));
   const seen = new Set((out.because ? out.because.items : []).map(i => i.id));
   out.fav = pages.flatMap(p => p.results || []).filter(r => !skip(r) && !seen.has(r.id) && r.poster_path).map(r => recItem(type, r)).slice(0, 24);
-  out.gnames = prof.map(g => GENRE_HU[g] || g);
+  out.gnames = prof.map(g => GENRE_HU[g] || g); out.picked = sel.length > 0;
   return out;
 }
 const recTile = it => `<div class="dtile" data-act="recOpen" data-k="${it.type}:${it.id}">
@@ -1566,6 +1579,9 @@ function renderRec(){
   const mine = myProvs(), c = recCache[recKind];
   if (!tmdbKey()) { $('#sheet').innerHTML = `<div class="sheet-head"><h2>Mit nézzek?</h2><button class="btn" data-act="close">Kész</button></div><div class="empty">Ehhez TMDB-kulcs kell (Beállítások).</div>`; return; }
   const seg = `<div class="seg" style="margin-bottom:10px">${[['movie','Film'],['tv','Sorozat']].map(([v, l]) => `<button data-act="recKind" data-v="${v}" class="${recKind === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const glist = recKind === 'movie' ? ['Action','Adventure','Animation','Comedy','Crime','Documentary','Drama','Family','Fantasy','History','Horror','Music','Mystery','Romance','Science-Fiction','Thriller','War','Western']
+    : ['Action','Animation','Comedy','Crime','Documentary','Drama','Family','Children','Science-Fiction','Mystery','War','Western'];
+  const gchips = `<div class="small muted" style="margin:2px 2px 6px">Műfaj ${lsArr('nezonaplo.recGenres').length ? '' : '(ha nem választasz, a kedvenceid alapján)'}</div>` + genreChips(glist, lsArr('nezonaplo.recGenres'), 'recGenre');
   const chips = `<div class="provs" style="margin-bottom:6px">${PROVS.map(([id, n]) => `<button class="pchip ${mine.includes(id) ? 'on' : ''}" data-act="recProv" data-v="${id}">${esc(n)}</button>`).join('')}</div>
     <div class="small muted" style="margin-bottom:12px">${mine.length ? 'Csak ezeken a szolgáltatókon elérhetőket ajánlok.' : 'Jelöld be, mire fizetsz elő – akkor csak azokon elérhetőt ajánlok.'} (RTL+ és TV2 Play adatai nem érhetők el.)</div>`;
   let body;
@@ -1576,11 +1592,11 @@ function renderRec(){
     body = (all.length || c.list.length ? '<button class="btn block primary" data-act="recRandom" style="margin-top:0">🎲 Válassz helyettem</button>' : '') +
       (c.list.length ? `<div class="section-title">A listádról, most nézhető</div><div class="list-plain">${c.list.map(sh => `<div class="card" data-act="open" data-id="${sh.id}">${posterHtml(sh)}<div class="body"><div class="name">${esc(sh.name)}</div><div class="sub small">📺 ${esc(provShort(sh))}</div></div></div>`).join('')}</div>` : '') +
       (c.because && c.because.items.length ? `<div class="section-title">Mert tetszett: ${esc(c.because.name)}</div><div class="dgrid">${c.because.items.map(recTile).join('')}</div>` : '') +
-      (c.fav.length ? `<div class="section-title">Neked ajánlott${c.gnames.length ? ' · ' + esc(c.gnames.join(', ')) : ''}</div><div class="dgrid">${c.fav.map(recTile).join('')}</div>` :
+      (c.fav.length ? `<div class="section-title">${c.picked ? 'Népszerű' : 'Neked ajánlott'}${c.gnames.length ? ' · ' + esc(c.gnames.join(', ')) : ''}</div><div class="dgrid">${c.fav.map(recTile).join('')}</div>` :
         '<div class="empty">Nem találtam ajánlást. Értékelj néhány sorozatot vagy filmet csillagokkal, vagy válassz más szolgáltatót.</div>') +
       '<div class="small muted" style="padding:12px 4px">Ajánlások és elérhetőség: TMDB / JustWatch. Értékeld, amit láttál – annál jobban eltalálja.</div>';
   }
-  $('#sheet').innerHTML = `<div class="sheet-head"><h2>🍿 Mit nézzek?</h2><button class="btn" data-act="close">Kész</button></div>${seg}${chips}${body}`;
+  $('#sheet').innerHTML = `<div class="sheet-head"><h2>🍿 Mit nézzek?</h2><button class="btn" data-act="close">Kész</button></div>${seg}${chips}${gchips}${body}`;
 }
 function recFind(k){
   const [type, id] = k.split(':'), c = recCache[type]; if (!c) return null;
@@ -1676,7 +1692,9 @@ function renderDiscover(){
   if (upc.error) return seg + '<div class="empty">Nem sikerült betölteni (nincs internet?).</div>';
   const prof = genreProfile();
   const me = prof.size ? `<label class="chk" style="margin:0 2px 10px"><input type="checkbox" id="discMe" ${discForMe ? 'checked' : ''}> ✨ Csak a nekem valók (${[...prof].map(g => GENRE_HU[g] || g).join(', ')})</label>` : '';
-  return seg + me + `<input type="search" id="discQ" placeholder="Keresés a közelgők között…" value="${esc(discQuery)}" autocomplete="off" style="margin-bottom:8px">
+  const cnt = {}; for (const it of discItems(discKind)) for (const g of (it.x || it.f).genres || []) cnt[g] = (cnt[g] || 0) + 1;
+  const gl = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
+  return seg + genreChips(gl, lsArr('nezonaplo.discGenres'), 'discGenre') + me + `<input type="search" id="discQ" placeholder="Keresés a közelgők között…" value="${esc(discQuery)}" autocomplete="off" style="margin-bottom:8px">
     <div id="discList">${discListHtml()}</div>`;
 }
 const discName = it => it.f ? it.f.name : (it.x.huName || it.x.name);
@@ -1684,7 +1702,9 @@ function discListHtml(){
   const q = norm(discQuery), words = q.split(' ').filter(Boolean);
   const match = it => !words.length || (n => words.every(w => n.includes(w)))(norm([discName(it), it.f ? it.f.orig : it.x.name].join(' ')));
   const prof = genreProfile();
-  const all = discItems(words.length ? '' : discKind).filter(match).filter(it => !discForMe || forMe(it, prof)), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
+  const dg = lsArr('nezonaplo.discGenres');
+  const all = discItems(words.length ? '' : discKind).filter(match).filter(it => !discForMe || forMe(it, prof))
+    .filter(it => !dg.length || ((it.x || it.f).genres || []).some(g => dg.includes(g))), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
   const hiddenHtml = hidden.length ? `<button class="btn block" data-act="discShowHidden">${showHiddenDisc ? 'Elrejtettek bezárása' : `Elrejtettek (${hidden.length})`}</button>` +
     (showHiddenDisc ? hidden.map(it => { const n = discName(it);
       return `<div class="card" style="margin-top:8px"><div class="body"><div class="name">${esc(n)}</div></div><button class="btn" data-act="discUnhide" data-key="${esc(discKey(it))}">Visszahoz</button></div>`; }).join('') : '') : '';
@@ -2045,6 +2065,7 @@ document.addEventListener('click', e => {
     case 'recOpenSheet': openSheet({type: 'rec'}); break;
     case 'recKind': recKind = el.dataset.v; lsSet('nezonaplo.recKind', recKind); renderRec(); break;
     case 'recProv': { const v = +el.dataset.v, m = myProvs(); lsSet('nezonaplo.provs', JSON.stringify(m.includes(v) ? m.filter(x => x !== v) : [...m, v])); recCache = {}; renderRec(); break; }
+    case 'recGenre': lsSet('nezonaplo.recGenres', JSON.stringify(toggleIn(lsArr('nezonaplo.recGenres'), el.dataset.v))); recCache = {}; renderRec(); break;
     case 'recOpen': openSheet({type: 'recd', k: el.dataset.k}); break;
     case 'recBack': openSheet({type: 'rec'}); break;
     case 'recHide': recHidden[el.dataset.k] = 1; lsSet('nezonaplo.recHidden', JSON.stringify(recHidden));
@@ -2057,6 +2078,7 @@ document.addEventListener('click', e => {
       if (pick.sh) openSheet({type: 'detail', id: pick.sh.id}); else openSheet({type: 'recd', k: pick.type + ':' + pick.id});
       toast('🎲 Ezt ajánlom!'); break; }
     case 'statsOpen': openSheet({type: 'stats'}); break;
+    case 'discGenre': lsSet('nezonaplo.discGenres', JSON.stringify(toggleIn(lsArr('nezonaplo.discGenres'), el.dataset.v))); render(); break;
     case 'discOpen': openSheet({type: 'disc', key: el.dataset.key}); break;
     case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); if (sheetState && sheetState.type === 'disc') closeSheet(); break;
     case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); if (sheetState && sheetState.type === 'disc') renderDiscDetail(); break;
