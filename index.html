@@ -158,7 +158,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '9';
+const APP_VER = '10';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -993,6 +993,11 @@ function renderFilmDetail(sh){
 
 /* ---------- Felfedezés: közelgő premierek (upcoming.json, a GitHub naponta frissíti) ---------- */
 let upc = null;
+// "Nem érdekel": sorozatnál az egész műsor (minden évad), filmnél a film rejtve marad
+let discHidden = (() => { try { return JSON.parse(localStorage.getItem('nezonaplo.discHidden')) || {}; } catch(e) { return {}; } })();
+const discKey = it => it.f ? 'f:' + it.f.qid : 's:' + it.x.id;
+const saveDiscHidden = () => lsSet('nezonaplo.discHidden', JSON.stringify(discHidden));
+let showHiddenDisc = false;
 function loadUpcoming(){
   if (!loadUpcoming.p) loadUpcoming.p = fetch('upcoming.json').then(r => r.json()).then(j => { upc = j; render(); })
     .catch(() => { loadUpcoming.p = null; upc = {error: true}; render(); });
@@ -1011,8 +1016,11 @@ function renderDiscover(){
   const seg = `<div class="seg" style="margin:0 0 12px">${[['uj','Új sorozatok'],['evad','Új évadok'],['film','Mozifilmek']].map(([v, l]) =>
     `<button data-act="discKind" data-v="${v}" class="${discKind === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (upc.error) return seg + '<div class="empty">Nem sikerült betölteni (nincs internet?).</div>';
-  const list = discItems();
-  if (!list.length) return seg + '<div class="empty">Most nincs ilyen a listán.</div>';
+  const all = discItems(), list = all.filter(it => !discHidden[discKey(it)]), hidden = all.filter(it => discHidden[discKey(it)]);
+  const hiddenHtml = hidden.length ? `<button class="btn block" data-act="discShowHidden">${showHiddenDisc ? 'Elrejtettek bezárása' : `Elrejtettek (${hidden.length})`}</button>` +
+    (showHiddenDisc ? hidden.map(it => { const n = it.f ? it.f.name : it.x.name;
+      return `<div class="card" style="margin-top:8px"><div class="body"><div class="name">${esc(n)}</div></div><button class="btn" data-act="discUnhide" data-key="${esc(discKey(it))}">Visszahoz</button></div>`; }).join('') : '') : '';
+  if (!list.length) return seg + '<div class="empty">Most nincs ilyen a listán.</div>' + hiddenHtml;
   let html = seg, lastMonth = '';
   for (const it of list) {
     const d = new Date(it.d);
@@ -1038,9 +1046,10 @@ function renderDiscover(){
       ${posterHtml({image: img, name}, 'poster disc-poster')}
       <div class="body" style="flex:1;min-width:0"><div style="font-weight:700;line-height:1.25">${esc(name)}</div>
         <div class="sub muted small" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(sub)}</div></div>
-      ${have ? '<span class="small muted" style="flex:none">✓ Listán</span>' : `<button class="btn primary" style="flex:none" ${act}>Érdekel</button>`}</div>`;
+      ${have ? '<span class="small muted" style="flex:none">✓ Listán</span>' : `<div class="acts" style="display:flex;flex-direction:column;gap:6px;flex:none">
+        <button class="btn primary" ${act}>Érdekel</button><button class="btn" data-act="discHide" data-key="${esc(discKey(it))}">Nem érdekel</button></div>`}</div>`;
   }
-  return html + `<div class="small muted" style="padding:10px 4px">Sorozatok: TVmaze (népszerűség szerint szűrve), filmek: Wikidata. Naponta frissül.</div>`;
+  return html + hiddenHtml + `<div class="small muted" style="padding:10px 4px">Sorozatok: TVmaze (népszerűség szerint szűrve), filmek: Wikidata. Naponta frissül.</div>`;
 }
 async function discAdd(el){
   if (el.dataset.qid) {
@@ -1218,6 +1227,9 @@ document.addEventListener('click', e => {
     case 'kozView': kozView = el.dataset.v; lsSet('nezonaplo.kozView', kozView); render(); window.scrollTo(0,0); break;
     case 'discKind': discKind = el.dataset.v; lsSet('nezonaplo.discKind', discKind); render(); window.scrollTo(0,0); break;
     case 'discAdd': e.stopPropagation(); discAdd(el); break;
+    case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); break;
+    case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); break;
+    case 'discShowHidden': showHiddenDisc = !showHiddenDisc; render(); break;
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;
     case 'refresh': refreshAll(true); break;
     case 'export': exportData(); break;
