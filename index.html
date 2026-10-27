@@ -234,7 +234,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '26';
+const APP_VER = '27';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -373,7 +373,7 @@ function epDelta(sh, s1, n1, s2, n2){
 }
 function setProgress(sh, s, n, count){
   const k = epDelta(sh, sh.lastSeason, sh.lastEpisode, s, n);
-  sh.lastSeason = s; sh.lastEpisode = n;
+  sh.lastSeason = s; sh.lastEpisode = n; delete sh.needPos;
   if (!k) return;
   // nagy ugrás (pl. beállítod, hol tartasz egy régóta nézett sorozatban): rákérdezünk, hogy most nézted-e
   if (count === 'ask' && k > 3 && !confirm(`${k} részt jelöltél megnézettnek.\n\nEzeket most nézted meg?\nOK = beszámít a statisztikába\nMégse = csak beállítom, hol tartok`)) return;
@@ -883,15 +883,21 @@ function sequelOf(sh){
   if (fd && fd.d < now() - 90 * DAY) return null;
   return sh.seq;
 }
+// névelő: a/az (magánhangzóval kezdődő cím előtt az)
+const az = n => /^[aáeéiíoóöőuúüű]/i.test(String(n).trim()) ? 'az' : 'a';
 function promptsHtml(){
   const out = [];
   for (const sh of state.shows) {
+    if (sh.needPos && sh.status === 'nezem' && unwatchedAired(sh).length > 1) out.push(`<div class="field ask">${posterHtml(sh)}<div style="flex:1;min-width:0">
+      <div class="small" style="line-height:1.35">Hol tartasz ${az(sh.name)} <b>${esc(sh.name)}</b> sorozatban? (${unwatchedAired(sh).length} rész jött ki eddig)</div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn primary" data-act="posUp" data-id="${sh.id}">Naprakész vagyok</button><button class="btn" data-act="posStart" data-id="${sh.id}">Elejéről kezdem</button></div>
+      <button class="btn block" style="margin-top:6px;padding:9px" data-act="posSet" data-id="${sh.id}">Beállítom, hol tartok</button></div></div>`);
     const ns = newSeasonOf(sh);
-    if (ns) out.push(`<div class="field ask">${posterHtml(sh)}<div style="flex:1;min-width:0"><div class="small" style="line-height:1.35">🔔 Jön a <b>${esc(sh.name)}</b> ${ns.s}. évadja${ns.d ? ' (' + (ns.d > now() ? rel(ns.d) : 'már elindult') + ')' : ''}. Érdekel?</div>
+    if (ns) out.push(`<div class="field ask">${posterHtml(sh)}<div style="flex:1;min-width:0"><div class="small" style="line-height:1.35">🔔 Jön ${az(sh.name)} <b>${esc(sh.name)}</b> ${ns.s}. évadja${ns.d ? ' (' + (ns.d > now() ? rel(ns.d) : 'már elindult') + ')' : ''}. Érdekel?</div>
       <div class="row" style="margin-top:8px"><button class="btn primary" data-act="askYes" data-id="${sh.id}" data-k="s:${ns.s}">Érdekel</button><button class="btn" data-act="askNo" data-id="${sh.id}" data-k="s:${ns.s}">Nem érdekel</button></div></div></div>`);
     const sq = sequelOf(sh);
     if (sq) { const fd = filmDate(sq);
-      out.push(`<div class="field ask">${posterHtml(sq)}<div style="flex:1;min-width:0"><div class="small" style="line-height:1.35">🔔 Folytatás jön: <b>${esc(sq.name)}</b>${fd ? ' (' + (fd.d > now() ? (fd.prec === 11 ? rel(fd.d) : fmtFilmDate(fd)) : 'már bemutatták') + ')' : ''}, a(z) ${esc(sh.name)} folytatása. Érdekel?</div>
+      out.push(`<div class="field ask">${posterHtml(sq)}<div style="flex:1;min-width:0"><div class="small" style="line-height:1.35">🔔 Folytatás jön: <b>${esc(sq.name)}</b>${fd ? ' (' + (fd.d > now() ? (fd.prec === 11 ? rel(fd.d) : fmtFilmDate(fd)) : 'már bemutatták') + ')' : ''}, ${az(sh.name)} ${esc(sh.name)} folytatása. Érdekel?</div>
         <div class="row" style="margin-top:8px"><button class="btn primary" data-act="askYes" data-id="${sh.id}" data-k="f:${sq.qid}">Érdekel</button><button class="btn" data-act="askNo" data-id="${sh.id}" data-k="f:${sq.qid}">Nem érdekel</button></div></div></div>`); }
   }
   return out.join('');
@@ -1285,7 +1291,7 @@ async function addFromSearch(tid, status){
 async function addShowObj(show, status, after){
   if (state.shows.some(sh => sh.tvmazeId === show.id)) return;
   const s = slimShow(show);
-  const sh = {id:uid(), tvmazeId:show.id, name:show.huName || show.name, customName: !!show.huName, image:s.image, meta:s.meta, status, lastSeason:0, lastEpisode:0, notes:'', manualNext:null, added:now(), cache:null};
+  const sh = {id:uid(), tvmazeId:show.id, name:show.huName || show.name, customName: !!show.huName, image:s.image, meta:s.meta, status, lastSeason:0, lastEpisode:0, notes:'', manualNext:null, added:now(), cache:null, needPos: status === 'nezem'};
   state.shows.push(sh); save();
   toast(`${show.name} → ${TITLES[status]}`);
   if (after) after();
@@ -1671,7 +1677,7 @@ function genreProfile(){
     for (const g of sh.meta.genres) w[g] = (w[g] || 0) + k;
   }
   const max = Math.max(0, ...Object.values(w));
-  return new Set(Object.keys(w).filter(g => w[g] >= Math.max(1.5, max * 0.4)));
+  return new Set(Object.keys(w).filter(g => w[g] >= Math.max(1.5, max * 0.4)).sort((a, b) => w[b] - w[a]).slice(0, 4));
 }
 const forMe = (it, prof) => ((it.x || it.f).genres || []).some(g => prof.has(g));
 function loadUpcoming(){
@@ -2032,6 +2038,9 @@ document.addEventListener('click', e => {
     case 'addFilm': addFilm(el.dataset.qid, el.dataset.st); break;
     case 'seen': e.stopPropagation(); markFilmSeen(sh); save(); render(); toast(`${sh.name} → megnézett filmek`); sequelCheck(sh); break;
     case 'finish': e.stopPropagation(); sh.status = 'befejeztem'; save(); render(); toast(`${sh.name} befejezve – szólok, ha új évad jön`); break;
+    case 'posUp': { const ua = unwatchedAired(sh), l = ua[ua.length - 1]; if (l) setProgress(sh, l.s, l.n, false); delete sh.needPos; save(); render(); toast('Naprakész – szólok, ha új rész jön'); break; }
+    case 'posStart': delete sh.needPos; save(); render(); break;
+    case 'posSet': delete sh.needPos; save(); openSheet({type: 'detail', id}); break;
     case 'askYes': askAnswer(sh, el.dataset.k, true); break;
     case 'askNo': askAnswer(sh, el.dataset.k, false); break;
     case 'tervFilter': tervFilter = el.dataset.v; render(); break;
