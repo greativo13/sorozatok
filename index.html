@@ -227,7 +227,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '19';
+const APP_VER = '20';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -794,7 +794,11 @@ function renderYoutube(){
 }
 
 /* ---------- renderelés ---------- */
+// YouTube fül: új felhasználóknál rejtve, a Beállításokban bekapcsolható (aki már bejelentkezett, annál látszik)
+const ytTabOn = () => { const v = lsGet('nezonaplo.ytTab'); return v === '1' || (v !== '0' && !!yt.fetchedAt); };
 function render(){
+  $('#tabs [data-tab=youtube]').style.display = ytTabOn() ? '' : 'none';
+  if (tab === 'youtube' && !ytTabOn()) tab = 'nezem';
   $('#title').textContent = TITLES[tab];
   $('#addBtn').style.display = tab === 'youtube' ? 'none' : '';
   const yb = $('#tabs [data-tab=youtube]'), yn = ytNewCount(); let ydot = yb.querySelector('.dot');
@@ -813,7 +817,8 @@ function render(){
   else if (tab === 'youtube') { m.innerHTML = renderYoutube();
     const sel = $('#ytChanSel'); if (sel) sel.addEventListener('change', () => { ytChan = sel.value; render(); });
     const sc = $('#ytShorts'); if (sc) sc.addEventListener('change', () => { yt.shortsHide = sc.checked; ytSave(); render(); }); }
-  else m.innerHTML = renderBeall();
+  else { m.innerHTML = renderBeall();
+    const yc = $('#ytTabChk'); if (yc) yc.addEventListener('change', () => { lsSet('nezonaplo.ytTab', yc.checked ? '1' : '0'); render(); toast(yc.checked ? 'YouTube fül bekapcsolva' : 'YouTube fül elrejtve'); }); }
   if (sheetState && sheetState.type === 'detail') renderDetail();
 }
 
@@ -1132,6 +1137,8 @@ function renderBeall(){
   ${group(`Megnézett filmek (${seenFilms.length})`, list(seenFilms, 'Még nincs.'))}
   ${group(`Befejezett sorozatok (${finished.length})`, '<div class="small muted" style="padding:0 4px 8px">Ezeknél szólok, ha új évad jön.</div>' + list(finished, 'Még nincs.'))}
   ${group(`Abbahagyott / nem érdekel (${archived.length})`, list(archived, 'Nincs ilyen.'))}
+  ${group('Megjelenés', `<div class="field"><label class="chk" style="margin-top:0"><input type="checkbox" id="ytTabChk" ${ytTabOn() ? 'checked' : ''}> YouTube fül megjelenítése</label>
+    <div class="small muted" style="margin-top:6px">A feliratkozott csatornáid új videói. Google-bejelentkezés kell hozzá.</div></div>`)}
   ${group('Tippek', `<div class="field small muted">A <b>Közelgő</b> fülön a naptár ikonnal egy részt vagy évadpremiert a telefon Naptárába tehetsz emlékeztetővel.<br><br>A kártyákat balra húzva gyorsan jelölhetsz: Nézem fülön +1 rész, Tervezemben Láttam/Elkezdem, a YouTube új videóinál balra Nem érdekel, jobbra Érdekel.<br><br>Adatok: <a href="https://www.tvmaze.com" style="color:var(--accent)">TVmaze</a>, Wikidata, TMDB/JustWatch.</div>`)}
   ${group('Veszélyes zóna', '<button class="btn block danger" data-act="wipe">Minden adat törlése</button>')}`;
 }
