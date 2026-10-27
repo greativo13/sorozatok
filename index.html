@@ -231,7 +231,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '23';
+const APP_VER = '24';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -300,7 +300,14 @@ function posterHtml(sh, cls){
 }
 
 /* ---------- epizód logika ---------- */
-const eps = sh => (sh.cache && sh.cache.episodes) || [];
+// a részek magyar elérhetősége (kézi késéssel, ha be van állítva)
+const epsMemo = new WeakMap();
+const eps = sh => {
+  const l = (sh.cache && sh.cache.episodes) || [];
+  if (!sh.huDelay) return l;
+  const m = epsMemo.get(l); if (m && m.k === sh.huDelay) return m.v;
+  const v = l.map(e => e.d ? Object.assign({}, e, {d: e.d + sh.huDelay * DAY}) : e); epsMemo.set(l, {k: sh.huDelay, v}); return v;
+};
 const after = (e, s, n) => e.s > s || (e.s === s && e.n > n);
 function nextUnwatched(sh){ return eps(sh).find(e => after(e, sh.lastSeason, sh.lastEpisode)); }
 // Meddig érhetők el a részek: most, vagy ha a műsor streamingen (pl. RTL+) előrébb jár,
@@ -312,7 +319,7 @@ function availUntil(sh){
   return fut.length ? Math.max(t, fut[Math.min(sh.ahead, fut.length) - 1].d) : t;
 }
 function unwatchedAired(sh){ const t = availUntil(sh); return eps(sh).filter(e => after(e, sh.lastSeason, sh.lastEpisode) && e.d && e.d <= t); }
-function futureEps(sh){ const t = availUntil(sh); return eps(sh).filter(e => e.d && e.d > t).sort((a,b) => a.d - b.d); }
+function futureEps(sh){ const t = availUntil(sh); return eps(sh).filter(e => e.d && e.d > t && after(e, sh.lastSeason, sh.lastEpisode)).sort((a,b) => a.d - b.d); }
 function manualFuture(sh){
   if (!sh.manualNext || !sh.manualNext.date) return null;
   const t = Date.parse(sh.manualNext.date + 'T12:00:00');
@@ -452,9 +459,19 @@ function slimShow(show){
     }
   };
 }
-function slimEpisodes(list){
+// Mikor nézhető Magyarországon? Ha a TVmaze nem ad pontos időt (streaming), a szolgáltató szokása alapján:
+// Disney+/Hulu: az amerikai esti megjelenés nálunk másnap 3:00; Apple TV: aznap 3:00; a többi (Netflix, Prime…): aznap 9:00.
+function huTime(airdate, web){
+  const [y, m, d] = airdate.split('-').map(Number), w = (web || '').toLowerCase();
+  if (/disney|hulu/.test(w)) return new Date(y, m - 1, d + 1, 3).getTime();
+  if (/apple/.test(w)) return new Date(y, m - 1, d, 3).getTime();
+  return new Date(y, m - 1, d, 9).getTime();
+}
+function slimEpisodes(list, show){
+  const web = show && !show.network && show.webChannel ? show.webChannel.name : '';
   return (list || []).filter(e => e.number != null && e.season != null)
-    .map(e => ({s:e.season, n:e.number, d: e.airstamp ? Date.parse(e.airstamp) : (e.airdate ? Date.parse(e.airdate + 'T20:00:00') : null), t:e.name || ''}))
+    .map(e => ({s:e.season, n:e.number, t:e.name || '',
+      d: e.airdate && !e.airtime && web ? huTime(e.airdate, web) : e.airstamp ? Date.parse(e.airstamp) : (e.airdate ? Date.parse(e.airdate + 'T20:00:00') : null)}))
     .sort((a,b) => a.s - b.s || a.n - b.n);
 }
 async function fetchShow(sh){
@@ -465,7 +482,7 @@ async function fetchShow(sh){
   const j = await r.json();
   const s = slimShow(j);
   if (!sh.customImage) sh.image = s.image || sh.image; sh.meta = s.meta; if (!sh.customName) sh.name = j.name || sh.name;
-  sh.cache = {episodes: slimEpisodes(j._embedded && j._embedded.episodes), fetchedAt: now()};
+  sh.cache = {episodes: slimEpisodes(j._embedded && j._embedded.episodes, j), fetchedAt: now(), v: 2};
   if (j.externals) sh.ext = {imdb: j.externals.imdb || null, tvdb: j.externals.thetvdb || null};
   state.lastRefresh = now();
 }
@@ -494,7 +511,7 @@ function huMatch(list, text){
 }
 async function refreshAll(force){
   if (refreshing) return;
-  const list = state.shows.filter(sh => (sh.tvmazeId || (sh.qid && sh.status === 'tervezem')) && sh.status !== 'abbahagytam' && (force || !sh.cache || now() - sh.cache.fetchedAt > STALE));
+  const list = state.shows.filter(sh => (sh.tvmazeId || (sh.qid && sh.status === 'tervezem')) && sh.status !== 'abbahagytam' && (force || !sh.cache || (sh.tvmazeId && sh.cache.v !== 2) || now() - sh.cache.fetchedAt > STALE));
   if (!list.length) { if (force) toast('Minden friss'); return; }
   if (!navigator.onLine) { if (force) toast('Nincs internet'); return; }
   refreshing = true; $('#refreshBtn').classList.add('spin');
@@ -1342,7 +1359,10 @@ function renderDetail(){
     <div class="field"><label>Jegyzet</label><textarea id="dNotes" placeholder="pl. HBO Max-on van">${esc(sh.notes)}</textarea></div>
     <details class="more" ${moreOpen ? 'open' : ''}><summary>További beállítások</summary>
     ${sh.tvmazeId ? `<div class="field"><label>Streamingen előrébb jár? (pl. RTL+ Premium, TV2 Play Prémium)</label>
-      <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>` : ''}
+      <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>
+    <div class="field"><label>Magyarországon később jelenik meg?</label>
+      <select id="dDelay">${[[0,'Nem, ugyanakkor'],[1,'+1 nappal később'],[2,'+2 nappal később'],[7,'+1 héttel később'],[14,'+2 héttel később']].map(([n, l]) => `<option value="${n}" ${(sh.huDelay || 0) === n ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <div class="small muted" style="margin-top:6px">Streamingnél (pl. Disney+) a magyar időpontot magától számolom; ezt csak akkor állítsd, ha itthon ennél is később jön.</div></div>` : ''}
     <div class="field"><label>Saját adásrend (ha a dátum hiányzik vagy hibás, pl. szombat 20:00)</label>
       <div class="wk" id="dWk">${WD_HU.map(([l, d]) => `<button data-d="${d}" class="${sh.sched && sh.sched.days.includes(d) ? 'on' : ''}">${l}</button>`).join('')}</div>
       <input type="time" id="dTime" value="${esc((sh.sched && sh.sched.time) || '20:00')}" style="margin-top:8px">
@@ -1366,6 +1386,7 @@ function renderDetail(){
   $('#dWk').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; b.classList.toggle('on'); saveSched(); });
   $('#dTime').addEventListener('change', saveSched);
   if ($('#dForce')) $('#dForce').addEventListener('change', saveSched);
+  const dl = $('#dDelay'); if (dl) dl.addEventListener('change', () => { sh.huDelay = parseInt(dl.value) || 0; save(); render(); });
   const ah = $('#dAhead'); if (ah) ah.addEventListener('change', () => { sh.ahead = parseInt(ah.value) || 0; save(); render(); });
   const prog = $('#dProg');
   if (prog) prog.addEventListener('change', () => { const [s, n] = prog.value.split('-').map(Number); setProgress(sh, s, n); save(); render(); });

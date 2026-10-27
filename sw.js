@@ -1,5 +1,5 @@
 // Nézőnapló service worker – offline indulás + borítóképek cache
-const VERSION = 'sm-v23';
+const VERSION = 'sm-v24';
 const IMG = 'sm-img';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './hu-shows.json', './upcoming.json'];
 
