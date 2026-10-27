@@ -157,7 +157,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '7';
+const APP_VER = '8';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -381,7 +381,7 @@ async function refreshAll(force){
    Böngészőből a YouTube RSS nem olvasható, ezért a YouTube Data API-t
    használjuk. Bejelentkezés átirányítással (iPhone-os főképernyő-appban is
    működik); a kapott kulcs 1 óráig érvényes, utána egy koppintással újat kérünk. */
-const YT_CLIENT_DEFAULT = '';
+const YT_CLIENT_DEFAULT = '419629109428-kv7ohj8go85u8926atkus79tolmgo8jt.apps.googleusercontent.com';
 const YT_KEY = 'nezonaplo.yt';
 const ytClient = () => lsGet('nezonaplo.ytClient') || YT_CLIENT_DEFAULT;
 let yt = (() => { try { return JSON.parse(localStorage.getItem(YT_KEY)) || null; } catch(e) { return null; } })()
