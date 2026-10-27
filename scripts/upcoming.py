@@ -46,8 +46,34 @@ def series():
             "premiered": s.get("premiered"), "genres": s.get("genres") or [],
             "image": (s.get("image") or {}).get("medium"), "weight": s.get("weight") or 0, "hu": hu,
         })
+    add_hu_titles(out)
     out.sort(key=lambda x: (x["date"], -x["weight"]))
     return out
+
+
+def sparql(q):
+    url = "https://query.wikidata.org/sparql?" + urllib.parse.urlencode({"query": q, "format": "json"})
+    return get(url)["results"]["bindings"]
+
+
+def add_hu_titles(items):
+    """Magyar cím a Wikidatából (TVmaze-azonosító: P8600), ahol van."""
+    ids = sorted({str(x["id"]) for x in items})
+    hu = {}
+    for i in range(0, len(ids), 150):
+        vals = " ".join(f'"{v}"' for v in ids[i:i + 150])
+        try:
+            rows = sparql(f'SELECT ?tv ?l WHERE {{ VALUES ?tv {{ {vals} }} ?s wdt:P8600 ?tv ; rdfs:label ?l . FILTER(lang(?l)="hu") }}')
+        except Exception as e:
+            print("magyar cím hiba:", e)
+            return
+        for b in rows:
+            hu[b["tv"]["value"]] = b["l"]["value"]
+        time.sleep(1)
+    for x in items:
+        h = hu.get(str(x["id"]))
+        if h and h != x["name"]:
+            x["huName"] = h
 
 
 SPARQL = """
@@ -60,9 +86,23 @@ SELECT DISTINCT ?f WHERE {
 """ % (FILM_DAYS, MIN_SITELINKS)
 
 
+# magyar bemutató (P291 = Magyarország) vagy magyar gyártás: népszerűségtől függetlenül
+SPARQL_HU = """
+SELECT DISTINCT ?f WHERE {
+  { ?st pq:P291 wd:Q28 . ?f p:P577 ?st . } UNION { ?f wdt:P495 wd:Q28 ; wdt:P31 wd:Q11424 ; p:P577 ?st . }
+  ?st ps:P577 ?d . FILTER(?d >= "%s"^^xsd:dateTime && ?d < "%s"^^xsd:dateTime)
+}
+"""
+
+
 def films():
-    url = "https://query.wikidata.org/sparql?" + urllib.parse.urlencode({"query": SPARQL, "format": "json"})
-    ids = [b["f"]["value"].rsplit("/", 1)[1] for b in get(url)["results"]["bindings"]]
+    ids = [b["f"]["value"].rsplit("/", 1)[1] for b in sparql(SPARQL)]
+    try:
+        q = SPARQL_HU % ((TODAY - timedelta(days=1)).isoformat() + "T00:00:00Z", (TODAY + timedelta(days=FILM_DAYS)).isoformat() + "T00:00:00Z")
+        ids += [b["f"]["value"].rsplit("/", 1)[1] for b in sparql(q)]
+    except Exception as e:
+        print("magyar filmek hiba:", e)
+    ids = list(dict.fromkeys(ids))
     out = []
     for i in range(0, len(ids), 50):
         ents = get("https://www.wikidata.org/w/api.php?" + urllib.parse.urlencode({
@@ -134,7 +174,7 @@ def parse_film(x):
         return None  # már bemutatták (pl. külföldön régen, itthon nincs dátum)
     img = ((c.get("P3383") or c.get("P18") or [{}])[0].get("mainsnak") or {}).get("datavalue", {}).get("value")
     lbl = lambda l: ((x.get("labels") or {}).get(l) or {}).get("value", "")
-    desc = ((x.get("descriptions") or {}).get("hu") or (x.get("descriptions") or {}).get("en") or {}).get("value", "")
+    desc = ((x.get("descriptions") or {}).get("hu") or {}).get("value", "")  # angol leírást nem mutatunk
     return {
         "name": lbl("hu") or lbl("en") or x["id"], "orig": lbl("en"), "desc": desc,
         "release": first["d"], "prec": first["prec"], "huRelease": huf["d"] if huf else None,
