@@ -1,6 +1,6 @@
 {
-  "name": "Sorozatmemória",
-  "short_name": "Sorozatok",
+  "name": "Nézőnapló",
+  "short_name": "Nézőnapló",
   "description": "Sorozatok és filmek: hol tartasz, mit akartál nézni, mikor jön új évad vagy premier.",
   "lang": "hu",
   "start_url": "./",

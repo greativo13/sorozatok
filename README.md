@@ -1,4 +1,4 @@
-# Sorozatmemória
+# Nézőnapló
 
 Saját sorozat- és filmfigyelő, iPhone-on appként: hol tartasz, mit akartál megnézni, mikor jön új rész, új évad vagy filmpremier.
 A sorozatadatokat a [TVmaze](https://www.tvmaze.com), a filmadatokat a [Wikidata](https://www.wikidata.org) adja (ingyenes, nem kell regisztráció).
@@ -17,7 +17,7 @@ A sorozatadatokat a [TVmaze](https://www.tvmaze.com), a filmadatokat a [Wikidata
 
 1. Nyisd meg a fenti címet **Safariban**.
 2. Alul **Megosztás** gomb (négyzet felfelé nyíllal) → **Főképernyőhöz adás** → **Hozzáadás**.
-3. Ezentúl a „Sorozatok” ikonról indítsd – teljes képernyős app lesz.
+3. Ezentúl a „Nézőnapló” ikonról indítsd – teljes képernyős app lesz.
 
 ## Használat
 
