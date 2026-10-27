@@ -86,11 +86,12 @@ nav.tabs button.on{color:var(--accent)}
 nav.tabs .dot{position:absolute;top:-2px;left:calc(50% + 8px);background:var(--accent);color:#fff;font-size:10px;
   min-width:16px;height:16px;border-radius:8px;display:grid;place-items:center;padding:0 4px}
 
-.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;display:none;align-items:flex-end;justify-content:center}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;display:none;align-items:flex-end;justify-content:center;
+  padding-top:calc(var(--safe-t) + 16px)}
 .sheet-bg.open{display:flex}
 /* a lap ne érjen fel az iPhone állapotsorába (ott az iOS elmossa a tartalmat) */
 .sheet{background:var(--bg);width:100%;max-width:640px;border-radius:20px 20px 0 0;
-  max-height:calc(100vh - var(--safe-t) - 16px);max-height:calc(100dvh - var(--safe-t) - 16px);
+  max-height:100%;
   overflow:auto;-webkit-overflow-scrolling:touch;padding:0 16px calc(var(--safe-b) + 20px);animation:up .22s ease}
 @keyframes up{from{transform:translateY(40px);opacity:.4}}
 .sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 0}
@@ -148,6 +149,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
+const APP_VER = '6';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -538,7 +540,7 @@ function renderBeall(){
   return `
   <div class="section-title">Adatok</div>
   <div class="field">
-    <div class="small muted">${state.shows.filter(s => !isFilm(s)).length} sorozat, ${state.shows.filter(isFilm).length} film · utolsó frissítés: ${last}</div>
+    <div class="small muted">${state.shows.filter(s => !isFilm(s)).length} sorozat, ${state.shows.filter(isFilm).length} film · utolsó frissítés: ${last} · verzió: ${APP_VER}</div>
     <button class="btn block primary" data-act="refresh">Frissítés most</button>
     <button class="btn block" data-act="export">Mentés fájlba (export)</button>
     <button class="btn block" data-act="import">Visszatöltés fájlból (import)</button>

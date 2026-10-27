@@ -1,5 +1,5 @@
 // Nézőnapló service worker – offline indulás + borítóképek cache
-const VERSION = 'sm-v5';
+const VERSION = 'sm-v6';
 const IMG = 'sm-img';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './hu-shows.json'];
 
@@ -20,7 +20,8 @@ self.addEventListener('fetch', e => {
   // Saját fájlok: előbb hálózat (így frissül az app), offline esetén cache
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(e.request).then(res => {
+      // no-cache: a böngésző ne a 10 percig tárolt régi fájlt adja vissza
+      fetch(e.request, {cache: 'no-cache'}).then(res => {
         const copy = res.clone();
         caches.open(VERSION).then(c => c.put(e.request, copy));
         return res;
