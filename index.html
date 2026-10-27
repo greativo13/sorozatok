@@ -8,7 +8,8 @@
 <meta name="theme-color" content="#0f0f14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- "black": a tartalom az óra/akku sáv alatt kezdődik, így az iOS nem mossa el a fejlécet -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Nézőnapló">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -34,7 +35,8 @@ img{display:block}
 
 /* egyszínű háttér: a backdrop-filter iPhone-on elmosta a fejlécet és eltüntette a gombokat */
 header{position:sticky;top:0;z-index:5;background:var(--bg);
-  padding:calc(var(--safe-t) + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
+  /* ha mégis az állapotsor mögé kerül a tartalom (régi telepítés), az iOS 26 elmosó sávja alá húzzuk a fejlécet */
+  padding:calc(var(--safe-t) * 1.5 + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
 header h1{font-size:28px;font-weight:800;margin:0;flex:1;letter-spacing:-.02em}
 .icon-btn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--surface2)}
 .icon-btn.primary{background:var(--accent);color:#fff}
@@ -159,7 +161,7 @@ textarea{min-height:70px;resize:vertical}
 
 <script>
 'use strict';
-const APP_VER = '12';
+const APP_VER = '13';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -637,7 +639,9 @@ function cardNezem(sh){
 }
 
 function renderTervezem(){
-  const list = state.shows.filter(sh => sh.status === 'tervezem').sort((a,b) => (b.added||0) - (a.added||0));
+  // premierdátum szerint: legközelebbi elöl; ami már elérhető vagy nincs dátuma, a végén (legutóbb hozzáadott elöl)
+  const when = sh => { const x = nextInfo(sh); if (x) return x.d; const fd = isFilm(sh) && filmDate(sh); return fd && fd.d > now() ? fd.d : Infinity; };
+  const list = state.shows.filter(sh => sh.status === 'tervezem').sort((a,b) => (when(a) - when(b)) || ((b.added||0) - (a.added||0)));
   if (!list.length) return `<div class="empty"><b>Nincs tervezett sorozat vagy film</b>Ha hallasz egy jó sorozatról vagy filmről, add hozzá ide a <b style="display:inline;color:var(--accent)">+</b> gombbal, hogy ne felejtsd el.</div>`;
   const f = tervFilter;
   const shown = list.filter(sh => f === 'mind' || (f === 'film') === isFilm(sh));
