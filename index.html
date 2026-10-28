@@ -252,7 +252,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '33';
+const APP_VER = '34';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1087,7 +1087,8 @@ function renderTervezem(){
   const seg = `<div class="seg" style="margin:4px 0 12px">${[['mind','Mind'],['sorozat','Sorozatok'],['film','Filmek']].map(([v, l]) =>
     `<button data-act="tervFilter" data-v="${v}" class="${f === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   // csoportok: már nézhető / hamarosan / nincs dátum
-  const avail = sh => { if (isFilm(sh)) { const fd = filmDate(sh); return !!(fd && fd.d <= now()); } return airedSeasons(sh) > 0; };
+  // sorozat: csak akkor 'nézhető', ha van kint olyan rész, amit még nem láttál (naprakész → Hamarosan)
+  const avail = sh => { if (isFilm(sh)) { const fd = filmDate(sh); return !!(fd && fd.d <= now()); } return sh.tvmazeId ? unwatchedAired(sh).length > 0 : airedSeasons(sh) > 0; };
   const onMine = sh => { const m = myProvs(); return sh.tmdbInfo && (sh.tmdbInfo.flat || []).some(p => !m.length || m.includes(p.id)) ? 1 : 0; };
   const now_ = shown.filter(avail).sort((a, b) => onMine(b) - onMine(a) || (b.added || 0) - (a.added || 0));
   const soon = shown.filter(sh => !avail(sh) && when(sh) < Infinity);
@@ -1097,18 +1098,21 @@ function renderTervezem(){
     + grp('Már nézhető', now_) + grp('Hamarosan', soon) + grp('Nincs még dátum', rest);
   function card(sh){
     if (isFilm(sh)) return cardFilm(sh);
-    const nx = nextInfo(sh); const ns = airedSeasons(sh);
+    const nx = nextInfo(sh), ns = airedSeasons(sh), ua = unwatchedAired(sh).length, started = sh.lastSeason > 0;
+    const nxs = nx ? ` · köv.: ${rel(nx.d)}${nx.premiere && nx.ep ? ` (${nx.ep.s}. évad)` : ''}` : '';
     let sub;
     if (!sh.tvmazeId) sub = sh.notes ? esc(sh.notes) : 'Kézi bejegyzés';
     else if (!ns && nx) sub = `Premier: ${rel(nx.d)}`;
-    else if (ns) sub = `${ns} évad elérhető` + (isEnded(sh) ? ' · befejezett' : '') + (nx ? ` · köv.: ${rel(nx.d)}` : '');
+    else if (started && !ua) sub = 'Naprakész' + (nxs || (isEnded(sh) ? ' · a sorozat véget ért' : ' · nincs még dátum'));
+    else if (started) sub = `${ua} megnézetlen rész` + nxs;
+    else if (ns) sub = `${ns} évad elérhető` + (isEnded(sh) ? ' · befejezett' : '') + nxs;
     else sub = 'Még nincs bemutatva';
     const net = provShort(sh) ? ` · 📺 ${esc(provShort(sh))}` : (sh.meta && sh.meta.network ? ` · ${esc(sh.meta.network)}` : '');
     const badge = recentPremiere(sh) ? '<span class="badge">ÚJ ÉVAD</span>' : '';
     return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="start" data-sl="Elkezdem">${posterHtml(sh)}
       <div class="body"><div class="name">${esc(sh.name)}${badge}</div><div class="sub">${sub}${net}</div>${tagsLine(sh)}
       ${sh.notes && sh.tvmazeId ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
-      <button class="btn" data-act="start" data-id="${sh.id}">Elkezdem</button></div>`;
+      <button class="btn" data-act="start" data-id="${sh.id}">${started ? 'Folytatom' : 'Elkezdem'}</button></div>`;
   }
 }
 function cardFilm(sh){
