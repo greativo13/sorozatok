@@ -251,7 +251,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '30';
+const APP_VER = '31';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1228,30 +1228,31 @@ function openSheet(st){ sheetState = st; moreOpen = false; $('#sheetBg').classLi
   if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); else if (st.type === 'disc') renderDiscDetail(); else if (st.type === 'stats') renderStats(); else if (st.type === 'eps') renderEps(); else if (st.type === 'rec') renderRec(); else if (st.type === 'recd') renderRecDetail(); }
 function closeSheet(){ sheetState = null; $('#sheetBg').classList.remove('open'); $('#sheet').innerHTML = ''; }
 
+// Hozzáadás: egyszerre keres sorozatot és filmet (nem kell módot váltani)
 function renderSearch(){
   $('#sheet').innerHTML = `<div class="grab"></div>
     <div class="sheet-head"><h2>Hozzáadás</h2><button class="btn" data-act="close">Kész</button></div>
-    <div class="seg" id="kSeg" style="margin-bottom:10px"><button data-v="sorozat" class="${searchKind === 'sorozat' ? 'on' : ''}">Sorozat</button><button data-v="film" class="${searchKind === 'film' ? 'on' : ''}">Film</button></div>
-    <input type="search" id="q" placeholder="${searchKind === 'film' ? 'Film címe (pl. Dűne)' : 'Sorozat címe (pl. Severance)'}" autocomplete="off" autocorrect="off" enterkeyhint="search">
-    <div id="results" style="margin-top:12px"></div>
+    <input type="search" id="q" placeholder="Sorozat vagy film címe" autocomplete="off" autocorrect="off" enterkeyhint="search" value="${esc(renderSearch.preset || '')}">
+    <div id="results" style="margin-top:12px;display:flex;flex-direction:column"><div id="resS"></div><div id="resF"></div></div>
     <button class="btn block" data-act="manual">Nem találom – kézi hozzáadás</button>`;
-  const q = $('#q');
-  $('#kSeg').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    searchKind = b.dataset.v; lsSet('sorozatmemoria.kind', searchKind);
-    $('#kSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-    q.placeholder = searchKind === 'film' ? 'Film címe (pl. Dűne)' : 'Sorozat címe (pl. Severance)';
-    doSearch(q.value); q.focus();
-  });
+  const q = $('#q'); renderSearch.preset = '';
   q.addEventListener('input', () => { clearTimeout(renderSearch.t); renderSearch.t = setTimeout(() => doSearch(q.value), 350); });
   setTimeout(() => q.focus(), 50);
-  doSearch('');
+  doSearch(q.value);
 }
+// ha mindkét keresés lefutott és egyik sem talált semmit
+function noResults(text){
+  if (doSearch.done !== text || searchFilms.done !== text) return;
+  const s = $('#resS'), f = $('#resF'); if (!s || !f || s.innerHTML.trim() || f.innerHTML.trim()) return;
+  s.innerHTML = '<div class="muted small" style="padding:8px">Nincs találat. Próbáld más írásmóddal vagy angol címmel, vagy add hozzá kézzel.</div>';
+}
+const secHead = t => `<div class="section-title" style="margin-top:6px">${t}</div>`;
 async function doSearch(text){
-  const box = $('#results'); if (!box) return;
+  const box = $('#resS'); if (!box) return;
   text = text.trim();
-  const stale = () => !$('#results') || $('#q').value.trim() !== text || searchKind !== 'sorozat';
-  if (searchKind === 'sorozat' && text.length < 2) {
+  const stale = () => !$('#resS') || $('#q').value.trim() !== text;
+  if (text.length < 2) {
+    $('#resF').innerHTML = '';
     // üres keresőnél: most futó magyar műsorok
     const hu = (await huShows()).filter(s => s.status === 'Running').sort((a, b) => a.name.localeCompare(b.name, 'hu'));
     if (stale()) return;
@@ -1259,9 +1260,8 @@ async function doSearch(text){
     box.innerHTML = hu.length ? `<div class="muted small" style="padding:4px 2px 8px">Most futó magyar műsorok</div>` + doSearch.cache.map(showRow).join('') : '';
     return;
   }
-  if (text.length < 2) { box.innerHTML = ''; return; }
-  box.innerHTML = '<div class="muted small" style="padding:8px">Keresés…</div>';
-  if (searchKind === 'film') return searchFilms(text);
+  box.innerHTML = '<div class="muted small" style="padding:8px">Keresés…</div>'; $('#resF').innerHTML = ''; box.style.order = $('#resF').style.order = 0;
+  searchFilms(text);
   const local = huMatch(await huShows(), text).slice(0, 8).map(huAsShow);
   let remote = null;
   try {
@@ -1274,12 +1274,10 @@ async function doSearch(text){
   const rest = (remote || []).filter(s => !local.some(l => l.id === s.id));
   const list = [...local, ...rest.filter(isHu), ...rest.filter(s => !isHu(s))];
   doSearch.cache = list;
-  if (!list.length) {
-    box.innerHTML = remote ? '<div class="muted small" style="padding:8px">Nincs találat.</div>'
-      : '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>';
-    return;
-  }
-  box.innerHTML = list.slice(0, 14).map(showRow).join('');
+  // ha a cím pontosan egyezik, az a csoport kerüljön előre
+  box.style.order = list.length && norm(list[0].name) === norm(text) ? -2 : 0;  // mindkettő pontos: a sorozat elöl
+  box.innerHTML = list.length ? secHead('Sorozatok') + list.slice(0, 8).map(showRow).join('') : '';
+  doSearch.done = text; noResults(text);
 }
 function showRow(show){
   const have = state.shows.find(sh => sh.tvmazeId === show.id);
@@ -1294,8 +1292,8 @@ function showRow(show){
 }
 // filmkeresés: Wikidata (magyar premierdátum, folytatások) + TMDB párhuzamosan (tartalék, szebb plakát, magyar cím)
 async function searchFilms(text){
-  const box = $('#results');
-  const stale = () => !$('#results') || $('#q').value.trim() !== text || searchKind !== 'film';
+  const box = $('#resF'); if (!box) return;
+  const stale = () => !$('#resF') || $('#q').value.trim() !== text;
   const wdP = (async () => {
     const s = await (await fetch(`${WD}?action=query&list=search&srsearch=${encodeURIComponent(text.replace(/[:"()\[\]~*?\\!-]/g, ' ') + ' ' + FILM_TYPES)}&srlimit=12&format=json&origin=*`)).json();
     const ids = ((s.query && s.query.search) || []).map(x => x.title);
@@ -1306,12 +1304,12 @@ async function searchFilms(text){
   const tmP = tmdbKey() ? tmdbGet('/search/movie', {query: text, language: 'hu-HU', region: 'HU'}).then(j => (j.results || []).slice(0, 10)).catch(() => null) : Promise.resolve(null);
   const [films, tm] = await Promise.all([wdP, tmP]);
   if (stale()) return;
-  if (!films && !tm) { box.innerHTML = '<div class="muted small" style="padding:8px">Nem sikerült keresni (nincs internet?). Használd a kézi hozzáadást.</div>'; return; }
+  if (!films && !tm) { box.innerHTML = ''; searchFilms.done = text; noResults(text); return; }
   searchFilms.cache = films || [];
   const wdTm = new Set((films || []).map(f => String(f.meta.tmdbId || '')).filter(Boolean));
   const extra = (tm || []).filter(r => !wdTm.has(String(r.id)) && (r.poster_path || r.release_date));
   searchFilms.tmdb = extra;
-  if (!(films || []).length && !extra.length) { box.innerHTML = '<div class="muted small" style="padding:8px">Nincs találat. Próbáld angol címmel, vagy add hozzá kézzel.</div>'; return; }
+  if (!(films || []).length && !extra.length) { box.innerHTML = ''; searchFilms.done = text; noResults(text); return; }
   const ownT = ownTmdb();
   const wdHtml = (films || []).map(f => {
     const have = state.shows.find(sh => sh.qid === f.qid);
@@ -1334,7 +1332,9 @@ async function searchFilms(text){
         `<button class="btn primary" data-act="addTmdbFilm" data-tm="${r.id}" data-st="tervezem">Megnézném</button>
          <button class="btn" data-act="addTmdbFilm" data-tm="${r.id}" data-st="lattam">Láttam</button>`}</div></div>`;
   }).join('');
-  box.innerHTML = wdHtml + (tmHtml ? (wdHtml ? '<div class="section-title">További találatok (TMDB)</div>' : '') + tmHtml : '');
+  const firstName = (films && films[0] && films[0].name) || (extra[0] && extra[0].title) || '';
+  box.style.order = norm(firstName) === norm(text) ? -1 : 0;
+  box.innerHTML = secHead('Filmek') + wdHtml + tmHtml; searchFilms.done = text;
 }
 // film felvétele TMDB-adatokból (kereső tartalék és ajánló)
 async function addTmdbFilm(id, status, base){
@@ -1873,7 +1873,7 @@ function discListHtml(){
   const hiddenHtml = hidden.length ? `<button class="btn block" data-act="discShowHidden">${showHiddenDisc ? 'Elrejtettek bezárása' : `Elrejtettek (${hidden.length})`}</button>` +
     (showHiddenDisc ? hidden.map(it => { const n = discName(it);
       return `<div class="card" style="margin-top:8px"><div class="body"><div class="name">${esc(n)}</div></div><button class="btn" data-act="discUnhide" data-key="${esc(discKey(it))}">Visszahoz</button></div>`; }).join('') : '') : '';
-  if (!list.length) return `<div class="empty">${words.length ? 'Nincs találat a közelgők között. Régebbi vagy már futó műsort a + gombbal kereshetsz.' : 'Most nincs ilyen a listán.'}</div>` + hiddenHtml;
+  if (!list.length) return `<div class="empty">${words.length ? 'Nincs találat a közelgők között.' : 'Most nincs ilyen a listán.'}</div>${words.length ? '<button class="btn block primary" data-act="searchAll">Keresés az összes film és sorozat között</button>' : ''}` + hiddenHtml;
   let html = '', lastMonth = '';
   for (const it of list) {
     const d = new Date(it.d);
@@ -2255,6 +2255,7 @@ document.addEventListener('click', e => {
       state.stats = {}; state.statsSince = now(); state.shows.forEach(x => { if (isFilm(x) && x.status === 'lattam') x.seenOld = true; }); save(); render(); renderStats(); toast('Statisztika nullázva'); } break;
     case 'statsOpen': openSheet({type: 'stats'}); break;
     case 'discGenre': lsSet('nezonaplo.discGenres', JSON.stringify(toggleIn(lsArr('nezonaplo.discGenres'), el.dataset.v))); render(); break;
+    case 'searchAll': renderSearch.preset = discQuery; openSheet({type: 'search'}); break;
     case 'discOpen': openSheet({type: 'disc', key: el.dataset.key}); break;
     case 'discHide': discHidden[el.dataset.key] = 1; saveDiscHidden(); render(); toast('Elrejtve'); if (sheetState && sheetState.type === 'disc') closeSheet(); break;
     case 'discUnhide': delete discHidden[el.dataset.key]; saveDiscHidden(); render(); if (sheetState && sheetState.type === 'disc') renderDiscDetail(); break;
