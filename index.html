@@ -222,6 +222,7 @@ main{overflow-x:clip}
 .ept{font-weight:700;font-size:14px;line-height:1.3}
 .epsum{margin-top:6px;line-height:1.45}
 .epspoil{margin-top:6px;color:var(--accent);font-weight:600}
+.when1{color:var(--accent);font-weight:700}
 .cover-btn{position:relative;flex:none}
 .row input{min-width:0}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
@@ -252,7 +253,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '34';
+const APP_VER = '35';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1099,15 +1100,16 @@ function renderTervezem(){
   function card(sh){
     if (isFilm(sh)) return cardFilm(sh);
     const nx = nextInfo(sh), ns = airedSeasons(sh), ua = unwatchedAired(sh).length, started = sh.lastSeason > 0;
-    const nxs = nx ? ` · köv.: ${rel(nx.d)}${nx.premiere && nx.ep ? ` (${nx.ep.s}. évad)` : ''}` : '';
-    let sub;
-    if (!sh.tvmazeId) sub = sh.notes ? esc(sh.notes) : 'Kézi bejegyzés';
-    else if (!ns && nx) sub = `Premier: ${rel(nx.d)}`;
-    else if (started && !ua) sub = 'Naprakész' + (nxs || (isEnded(sh) ? ' · a sorozat véget ért' : ' · nincs még dátum'));
-    else if (started) sub = `${ua} megnézetlen rész` + nxs;
-    else if (ns) sub = `${ns} évad elérhető` + (isEnded(sh) ? ' · befejezett' : '') + nxs;
-    else sub = 'Még nincs bemutatva';
+    // 1. sor (kiemelve): mikor jön; 2. sor: állapot + hol nézhető – ugyanúgy, mint a filmeknél
+    const when1 = !nx ? '' : !ns ? `Premier: ${rel(nx.d)}` : nx.premiere && nx.ep ? `${nx.ep.s}. évad: ${rel(nx.d)}` : `Köv. rész: ${rel(nx.d)}`;
+    let st;
+    if (!sh.tvmazeId) st = sh.notes ? esc(sh.notes) : 'Kézi bejegyzés';
+    else if (!ns) st = nx ? 'Új sorozat' : 'Még nincs bemutatva';
+    else if (started && !ua) st = 'Naprakész' + (!nx ? (isEnded(sh) ? ' · a sorozat véget ért' : ' · nincs még dátum') : '');
+    else if (started) st = `${ua} megnézetlen rész`;
+    else st = `${ns} évad elérhető` + (isEnded(sh) ? ' · befejezett' : '');
     const net = provShort(sh) ? ` · 📺 ${esc(provShort(sh))}` : (sh.meta && sh.meta.network ? ` · ${esc(sh.meta.network)}` : '');
+    const sub = (when1 ? `<span class="when1">${when1}</span><br>` : '') + st;
     const badge = recentPremiere(sh) ? '<span class="badge">ÚJ ÉVAD</span>' : '';
     return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="start" data-sl="Elkezdem">${posterHtml(sh)}
       <div class="body"><div class="name">${esc(sh.name)}${badge}</div><div class="sub">${sub}${net}</div>${tagsLine(sh)}
@@ -1117,11 +1119,12 @@ function renderTervezem(){
 }
 function cardFilm(sh){
   const nx = nextInfo(sh), fd = filmDate(sh);
-  let sub;
-  if (nx) sub = `<span style="color:var(--accent);font-weight:600">${esc(nx.label)}: ${rel(nx.d)}</span>`;
-  else if (fd && fd.d > now()) sub = `Várható: ${esc(fmtFilmDate(fd))}`;
-  else sub = esc([filmYear(sh) ? 'Megjelent: ' + filmYear(sh) : '', sh.meta && sh.meta.desc].filter(Boolean).join(' · ') || 'Film');
-  if (provShort(sh)) sub += ` · 📺 ${esc(provShort(sh))}`;
+  let when1 = '', st;
+  if (nx) when1 = `${esc(nx.label)}: ${rel(nx.d)}`;
+  else if (fd && fd.d > now()) when1 = `Várható: ${esc(fmtFilmDate(fd))}`;
+  st = fd && fd.d <= now() ? `Megjelent: ${filmYear(sh) || fmtFilmDate(fd)}` : 'Film';
+  if (provShort(sh)) st += ` · 📺 ${esc(provShort(sh))}`;
+  const sub = (when1 ? `<span class="when1">${when1}</span><br>` : '') + st;
   return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="seen" data-sl="Láttam">${posterHtml(sh)}
     <div class="body"><div class="name">${esc(sh.name)}<span class="badge gray">FILM</span></div><div class="sub">${sub}</div>${tagsLine(sh)}
     ${sh.notes ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
