@@ -251,7 +251,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '31';
+const APP_VER = '32';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1044,7 +1044,16 @@ function renderTervezem(){
   const shown = list.filter(sh => f === 'mind' || (f === 'film') === isFilm(sh));
   const seg = `<div class="seg" style="margin:4px 0 12px">${[['mind','Mind'],['sorozat','Sorozatok'],['film','Filmek']].map(([v, l]) =>
     `<button data-act="tervFilter" data-v="${v}" class="${f === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  return bannerHtmlFor(list) + seg + (shown.length ? '' : '<div class="empty">Ebben a csoportban nincs semmi.</div>') + shown.map(sh => {
+  // csoportok: már nézhető / hamarosan / nincs dátum
+  const avail = sh => { if (isFilm(sh)) { const fd = filmDate(sh); return !!(fd && fd.d <= now()); } return airedSeasons(sh) > 0; };
+  const onMine = sh => { const m = myProvs(); return sh.tmdbInfo && (sh.tmdbInfo.flat || []).some(p => !m.length || m.includes(p.id)) ? 1 : 0; };
+  const now_ = shown.filter(avail).sort((a, b) => onMine(b) - onMine(a) || (b.added || 0) - (a.added || 0));
+  const soon = shown.filter(sh => !avail(sh) && when(sh) < Infinity);
+  const rest = shown.filter(sh => !avail(sh) && when(sh) === Infinity);
+  const grp = (t, arr) => arr.length ? `<div class="section-title">${t} (${arr.length})</div>` + arr.map(card).join('') : '';
+  return bannerHtmlFor(list) + seg + (shown.length ? '' : '<div class="empty">Ebben a csoportban nincs semmi.</div>')
+    + grp('Már nézhető', now_) + grp('Hamarosan', soon) + grp('Nincs még dátum', rest);
+  function card(sh){
     if (isFilm(sh)) return cardFilm(sh);
     const nx = nextInfo(sh); const ns = airedSeasons(sh);
     let sub;
@@ -1058,14 +1067,14 @@ function renderTervezem(){
       <div class="body"><div class="name">${esc(sh.name)}${badge}</div><div class="sub">${sub}${net}</div>
       ${sh.notes && sh.tvmazeId ? `<div class="sub small">📝 ${esc(sh.notes)}</div>` : ''}</div>
       <button class="btn" data-act="start" data-id="${sh.id}">Elkezdem</button></div>`;
-  }).join('');
+  }
 }
 function cardFilm(sh){
   const nx = nextInfo(sh), fd = filmDate(sh);
   let sub;
   if (nx) sub = `<span style="color:var(--accent);font-weight:600">${esc(nx.label)}: ${rel(nx.d)}</span>`;
   else if (fd && fd.d > now()) sub = `Várható: ${esc(fmtFilmDate(fd))}`;
-  else sub = esc([filmYear(sh), sh.meta && sh.meta.desc].filter(Boolean).join(' · ') || 'Film');
+  else sub = esc([filmYear(sh) ? 'Megjelent: ' + filmYear(sh) : '', sh.meta && sh.meta.desc].filter(Boolean).join(' · ') || 'Film');
   if (provShort(sh)) sub += ` · 📺 ${esc(provShort(sh))}`;
   return `<div class="card" data-act="open" data-id="${sh.id}" data-swipe-l="seen" data-sl="Láttam">${posterHtml(sh)}
     <div class="body"><div class="name">${esc(sh.name)}<span class="badge gray">FILM</span></div><div class="sub">${sub}</div>
