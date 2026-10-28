@@ -223,6 +223,10 @@ main{overflow-x:clip}
 .epsum{margin-top:6px;line-height:1.45}
 .epspoil{margin-top:6px;color:var(--accent);font-weight:600}
 .when1{color:var(--accent);font-weight:700}
+.ltools{display:flex;gap:8px;align-items:center;margin:4px 0 12px}
+.ltools input{flex:1;min-width:0}
+.fbtn{flex:none;margin-left:auto;background:var(--surface2);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:600;color:var(--muted);max-width:60%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fbtn.on{background:var(--accent);color:#fff}
 .cover-btn{position:relative;flex:none}
 .row input{min-width:0}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
@@ -233,6 +237,7 @@ main{overflow-x:clip}
 <body>
 <header>
   <h1 id="title">Nézem</h1>
+  <button class="icon-btn" id="filterBtn" aria-label="Szűrő"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg></button>
   <button class="icon-btn" id="refreshBtn" aria-label="Frissítés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
   <button class="icon-btn primary" id="addBtn" aria-label="Sorozat hozzáadása"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </header>
@@ -253,7 +258,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '35';
+const APP_VER = '37';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -865,6 +870,8 @@ function render(){
   if (tab === 'youtube' && !ytTabOn()) tab = 'nezem';
   $('#title').textContent = TITLES[tab];
   $('#addBtn').style.display = tab === 'youtube' ? 'none' : '';
+  const fb = $('#filterBtn'); fb.style.display = tab === 'nezem' || tab === 'tervezem' ? '' : 'none';
+  fb.classList.toggle('primary', !!(lsGet('nezonaplo.tagFilter') || (tab === 'tervezem' && tervFilter !== 'mind')));
   const yb = $('#tabs [data-tab=youtube]'), yn = ytNewCount(); let ydot = yb.querySelector('.dot');
   if (yn) { if (!ydot) { ydot = document.createElement('span'); ydot.className = 'dot'; yb.appendChild(ydot); } ydot.textContent = yn > 99 ? '99+' : yn; }
   else if (ydot) ydot.remove();
@@ -992,12 +999,24 @@ function listFilter(list){
   const tf = lsGet('nezonaplo.tagFilter') || '', w = norm(ownQuery).split(' ').filter(Boolean);
   return list.filter(sh => (!tf || (sh.tags || []).includes(tf)) && (!w.length || w.every(x => norm(sh.name + ' ' + ((sh.meta || {}).orig || '')).includes(x))));
 }
-function listTools(total){
+// lista teteje: kereső + egy "Szűrő" gomb (típus és címke egy lapon)
+function listTools(total, withType){
+  const tf = lsGet('nezonaplo.tagFilter') || '';
+  const parts = [withType && tervFilter !== 'mind' ? (tervFilter === 'film' ? 'Filmek' : 'Sorozatok') : '', tf ? '🏷 ' + tf : ''].filter(Boolean);
+  // aktív szűrés: rövid jelzés a lista tetején (koppintásra a szűrő lap nyílik)
+  const info = parts.length ? `<button class="pchip on" data-act="filterReset">Szűrés: ${esc(parts.join(' · '))} ✕</button>` : '';
+  const search = total > 6 || ownQuery ? `<input type="search" id="ownQ" placeholder="Keresés a listádban…" value="${esc(ownQuery)}" autocomplete="off">` : '';
+  return search || info ? `<div class="ltools">${search}</div>${info ? `<div style="margin:-4px 0 12px">${info}</div>` : ''}` : '';
+}
+function renderFilter(){
   const used = [...new Set(state.shows.flatMap(sh => sh.tags || []))], tf = lsGet('nezonaplo.tagFilter') || '';
-  const chips = used.length ? `<div class="chiprow">${[['', 'Mind'], ...used.map(t => [t, '🏷 ' + t])].map(([v, l]) =>
-    `<button class="pchip ${tf === v ? 'on' : ''}" data-act="tagFilter" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>` : '';
-  const search = total > 6 || ownQuery ? `<input type="search" id="ownQ" placeholder="Keresés a listádban…" value="${esc(ownQuery)}" autocomplete="off" style="margin-bottom:10px">` : '';
-  return chips + search;
+  $('#sheet').innerHTML = `<div class="sheet-head"><h2>Szűrő</h2><button class="btn" data-act="close">Kész</button></div>
+    ${sheetState.withType ? `<div class="field"><label>Típus</label><div class="seg">${[['mind','Mind'],['sorozat','Sorozatok'],['film','Filmek']].map(([v, l]) =>
+      `<button data-act="tervFilter" data-v="${v}" class="${tervFilter === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>` : ''}
+    <div class="field"><label>Címke</label>${used.length ? `<div class="provs">${[['', 'Mind'], ...used.map(t => [t, '🏷 ' + t])].map(([v, l]) =>
+      `<button class="pchip ${tf === v ? 'on' : ''}" data-act="tagFilter" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>`
+      : '<div class="small muted">Még nincs címkéd. A sorozatok és filmek adatlapján adhatsz hozzá (pl. „Párommal”).</div>'}</div>
+    ${tervFilter !== 'mind' || tf ? '<button class="btn block" data-act="filterReset">Szűrés törlése</button>' : ''}`;
 }
 const tagsLine = sh => (sh.tags || []).length ? `<div class="sub small">🏷 ${esc(sh.tags.join(', '))}</div>` : '';
 function tagsField(sh){
@@ -1085,8 +1104,7 @@ function renderTervezem(){
   if (!list.length) return `<div class="empty"><b>Nincs tervezett sorozat vagy film</b>Ha hallasz egy jó sorozatról vagy filmről, add hozzá ide a <b style="display:inline;color:var(--accent)">+</b> gombbal, hogy ne felejtsd el.</div>`;
   const f = tervFilter;
   const shown = listFilter(list).filter(sh => f === 'mind' || (f === 'film') === isFilm(sh));
-  const seg = `<div class="seg" style="margin:4px 0 12px">${[['mind','Mind'],['sorozat','Sorozatok'],['film','Filmek']].map(([v, l]) =>
-    `<button data-act="tervFilter" data-v="${v}" class="${f === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const seg = '';
   // csoportok: már nézhető / hamarosan / nincs dátum
   // sorozat: csak akkor 'nézhető', ha van kint olyan rész, amit még nem láttál (naprakész → Hamarosan)
   const avail = sh => { if (isFilm(sh)) { const fd = filmDate(sh); return !!(fd && fd.d <= now()); } return sh.tvmazeId ? unwatchedAired(sh).length > 0 : airedSeasons(sh) > 0; };
@@ -1095,7 +1113,7 @@ function renderTervezem(){
   const soon = shown.filter(sh => !avail(sh) && when(sh) < Infinity);
   const rest = shown.filter(sh => !avail(sh) && when(sh) === Infinity);
   const grp = (t, arr) => arr.length ? `<div class="section-title">${t} (${arr.length})</div>` + arr.map(card).join('') : '';
-  return bannerHtmlFor(list) + seg + listTools(list.length) + (shown.length ? '' : '<div class="empty">Ebben a csoportban nincs semmi.</div>')
+  return bannerHtmlFor(list) + seg + listTools(list.length, true) + (shown.length ? '' : '<div class="empty">Ebben a csoportban nincs semmi.</div>')
     + grp('Már nézhető', now_) + grp('Hamarosan', soon) + grp('Nincs még dátum', rest);
   function card(sh){
     if (isFilm(sh)) return cardFilm(sh);
@@ -1283,7 +1301,7 @@ function renderBeall(){
 /* ---------- lapok (sheet) ---------- */
 function openSheet(st){ sheetState = st; moreOpen = false; $('#sheetBg').classList.add('open');
   if (st.type === 'detail') { const sh = byId(st.id); if (sh) tmdbLoad(sh).then(ch => { if (ch && sheetState && sheetState.id === st.id) renderDetail(); }); }
-  if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); else if (st.type === 'disc') renderDiscDetail(); else if (st.type === 'stats') renderStats(); else if (st.type === 'eps') renderEps(); else if (st.type === 'rec') renderRec(); else if (st.type === 'recd') renderRecDetail(); }
+  if (st.type === 'search') renderSearch(); else if (st.type === 'detail') renderDetail(); else if (st.type === 'manual') renderManual(); else if (st.type === 'yt') renderYtDetail(); else if (st.type === 'disc') renderDiscDetail(); else if (st.type === 'stats') renderStats(); else if (st.type === 'eps') renderEps(); else if (st.type === 'filter') renderFilter(); else if (st.type === 'rec') renderRec(); else if (st.type === 'recd') renderRecDetail(); }
 function closeSheet(){ sheetState = null; $('#sheetBg').classList.remove('open'); $('#sheet').innerHTML = ''; }
 
 // Hozzáadás: egyszerre keres sorozatot és filmet (nem kell módot váltani)
@@ -2264,7 +2282,9 @@ document.addEventListener('click', e => {
     case 'posSet': delete sh.needPos; save(); openSheet({type: 'detail', id}); break;
     case 'askYes': askAnswer(sh, el.dataset.k, true); break;
     case 'askNo': askAnswer(sh, el.dataset.k, false); break;
-    case 'tervFilter': tervFilter = el.dataset.v; render(); break;
+    case 'tervFilter': tervFilter = el.dataset.v; render(); if (sheetState && sheetState.type === 'filter') renderFilter(); break;
+    case 'filterOpen': openSheet({type: 'filter', withType: !!el.dataset.v}); break;
+    case 'filterReset': tervFilter = 'mind'; lsSet('nezonaplo.tagFilter', ''); render(); if (sheetState && sheetState.type === 'filter') renderFilter(); break;
     case 'caughtUp': caughtUp(sh); break;
     case 'refreshOne': (async () => { try { await (sh.qid ? fetchFilm(sh) : fetchShow(sh)); save(); render(); toast('Frissítve'); } catch(err) { toast('Nem sikerült frissíteni'); } })(); break;
     case 'delete': if (confirm(`Törlöd: ${sh.name}?`)) { state.shows = state.shows.filter(x => x !== sh); save(); closeSheet(); render(); } break;
@@ -2337,7 +2357,7 @@ document.addEventListener('click', e => {
     case 'epsSeason': epsSeason = +el.dataset.v; renderEps(); break;
     case 'epToggle': epToggle(sh, el.dataset.k); break;
     case 'epReveal': epsReveal[id + el.dataset.k] = 1; renderEps(); break;
-    case 'tagFilter': lsSet('nezonaplo.tagFilter', el.dataset.v); render(); break;
+    case 'tagFilter': lsSet('nezonaplo.tagFilter', el.dataset.v); render(); if (sheetState && sheetState.type === 'filter') renderFilter(); break;
     case 'tagToggle': { const t = el.dataset.v; sh.tags = (sh.tags || []).includes(t) ? sh.tags.filter(x => x !== t) : [...(sh.tags || []), t]; save(); render(); renderDetail(); break; }
     case 'tagAdd': { const t = ($('#dTag').value || '').trim(); if (!t) break; sh.tags = [...new Set([...(sh.tags || []), t])]; save(); render(); renderDetail(); toast('Címke hozzáadva'); break; }
     case 'staleKeep': sh.staleOk = now(); save(); render(); toast('Rendben, 2 hónap múlva újra rákérdezek'); break;
@@ -2359,6 +2379,7 @@ document.addEventListener('click', e => {
   }
 });
 $('#addBtn').addEventListener('click', () => openSheet({type:'search'}));
+$('#filterBtn').addEventListener('click', () => openSheet({type: 'filter', withType: tab === 'tervezem'}));
 $('#refreshBtn').addEventListener('click', () => tab === 'youtube' ? ytRefresh(true) : refreshAll(true));
 $('#sheetBg').addEventListener('click', e => { if (e.target.id === 'sheetBg') closeSheet(); });
 $('#coverFile').addEventListener('change', e => { setCover(e.target.files[0]); e.target.value = ''; });
