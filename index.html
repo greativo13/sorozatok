@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Nézőnapló</title>
 <meta name="description" content="Sorozat- és filmfigyelő: hol tartasz, mit akartál nézni, mikor jön új évad vagy premier.">
-<meta name="theme-color" content="#0f0f14">
+<meta name="theme-color" content="#0f0f14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- "black": a tartalom az óra/akku sáv alatt kezdődik, így az iOS nem mossa el a fejlécet -->
@@ -51,7 +52,10 @@ header h1{font-size:28px;font-weight:800;margin:0;flex:1;letter-spacing:-.02em}
 .spin svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-main{padding:4px 16px calc(var(--safe-b) + 90px);max-width:640px;margin:0 auto}
+/* az oldal mindig kitölti a képernyőt (rövid listánál iPhone-on különben fekete sáv látszott alul) */
+html{min-height:100%;background:var(--bg)}
+body{min-height:100vh;min-height:100dvh}
+main{padding:4px 16px calc(var(--safe-b) + 90px);max-width:640px;margin:0 auto;min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px)}
 .banner{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;border-radius:16px;
   padding:12px 14px;margin:6px 0 14px;font-weight:600;font-size:15px}
 .banner div+div{margin-top:4px}
@@ -269,7 +273,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '39';
+const APP_VER = '40';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
