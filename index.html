@@ -873,7 +873,10 @@ function renderYoutube(){
 /* ---------- renderelés ---------- */
 // YouTube fül: új felhasználóknál rejtve, a Beállításokban bekapcsolható (aki már bejelentkezett, annál látszik)
 const ytTabOn = () => { const v = lsGet('nezonaplo.ytTab'); return v === '1' || (v !== '0' && !!yt.fetchedAt); };
+let swipeActive = false, renderPending = false;
 function render(){
+  // húzás közben nem rajzolunk újra (különben a kártya kicserélődik az ujj alatt, és a húzás megszakad)
+  if (swipeActive) { renderPending = true; return; }
   scanNotifs();
   $('#tabs [data-tab=youtube]').style.display = ytTabOn() ? '' : 'none';
   if (tab === 'youtube' && !ytTabOn()) tab = 'nezem';
@@ -2310,16 +2313,17 @@ let swipedAt = 0;
 (() => {
   let el = null, x0 = 0, y0 = 0, dx = 0, mode = '';
   const TH = 90;
+  const release = () => { swipeActive = false; if (renderPending) { renderPending = false; render(); } };
   const reset = () => { if (!el) return; el.style.transition = 'transform .2s'; el.style.transform = ''; el.classList.remove('sw-l', 'sw-r', 'sw-go');
     const e = el; setTimeout(() => { e.style.transition = ''; }, 220); el = null; mode = ''; };
   document.addEventListener('touchstart', e => {
     const t = e.target.closest('[data-swipe-l],[data-swipe-r]'); if (!t || e.touches.length > 1) return;
-    el = t; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mode = '';
+    el = t; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mode = ''; swipeActive = true;
   }, {passive: true});
   document.addEventListener('touchmove', e => {
     if (!el) return;
     const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
-    if (!mode) { if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { el = null; return; } if (Math.abs(mx) > 12) mode = 'h'; else return; }
+    if (!mode) { if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { el = null; release(); return; } if (Math.abs(mx) > 12) mode = 'h'; else return; }
     e.preventDefault();
     dx = mx;
     if ((dx < 0 && !el.dataset.swipeL) || (dx > 0 && !el.dataset.swipeR)) dx = dx / 6; // arra nincs művelet: csak kicsit enged
@@ -2336,11 +2340,13 @@ let swipedAt = 0;
       if (act) { // ugyanazon az úton fut, mint a gombok
         const b = document.createElement('button'); b.hidden = true; b.dataset.act = act;
         if (src.dataset.id) b.dataset.id = src.dataset.id; if (src.dataset.vid) b.dataset.vid = src.dataset.vid;
+        swipeActive = false; renderPending = false;
         document.body.appendChild(b); swipedAt = 0; b.click(); b.remove(); swipedAt = now();
       }
     } else el = null;
+    release();
   };
-  document.addEventListener('touchend', end); document.addEventListener('touchcancel', () => { if (el) reset(); });
+  document.addEventListener('touchend', end); document.addEventListener('touchcancel', () => { if (el) reset(); release(); });
 })();
 
 /* ---------- események ---------- */
