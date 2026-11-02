@@ -273,7 +273,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '40';
+const APP_VER = '41';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -446,7 +446,13 @@ function recentPremiere(sh){
   return eps(sh).find(e => e.n === 1 && e.s > 1 && e.d && e.d <= t && t - e.d < 21*DAY && after(e, sh.lastSeason, sh.lastEpisode));
 }
 function airedSeasons(sh){ const t = availUntil(sh); return new Set(eps(sh).filter(e => e.d && e.d <= t).map(e => e.s)).size; }
-const isEnded = sh => sh.meta && sh.meta.status === 'Ended';
+// véget ért-e: kézi beállítás > TMDB (ha folytatódik/készül, nem ért véget) > TVmaze
+const isEnded = sh => {
+  if (sh.endOverride) return sh.endOverride === 'ended';
+  const t = sh.tmdbInfo || {};
+  if (t.status === 'Returning Series' || t.status === 'In Production' || t.status === 'Planned' || t.inProd) return false;
+  return !!(sh.meta && sh.meta.status === 'Ended') || t.status === 'Ended' || t.status === 'Canceled';
+};
 const isFilm = sh => sh.kind === 'film';
 
 /* ---------- filmek (Wikidata) ---------- */
@@ -1640,6 +1646,8 @@ function renderDetail(){
       ${sh.customName ? `<button class="btn block" style="padding:9px" data-act="nameReset" data-id="${sh.id}">Eredeti cím visszaállítása</button>` : ''}</div>
     ${sh.tvmazeId ? `<div class="field"><label>Streamingen előrébb jár? (pl. RTL+ Premium, TV2 Play Prémium)</label>
       <select id="dAhead">${[0,1,2,3].map(n => `<option value="${n}" ${(sh.ahead || 0) === n ? 'selected' : ''}>${n ? n + ' résszel előrébb jár, mint a tévé' : 'Nem, a tévével együtt megy'}</option>`).join('')}</select></div>
+    <div class="field"><label>A sorozat állapota</label>
+      <select id="dEnd">${[['', 'Automatikus (adatbázis szerint)'], ['running', 'Még fut / lesz folytatása'], ['ended', 'Véget ért']].map(([v, l]) => `<option value="${v}" ${(sh.endOverride || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="field"><label>Magyarországon később jelenik meg?</label>
       <select id="dDelay">${[[0,'Nem, ugyanakkor'],[1,'+1 nappal később'],[2,'+2 nappal később'],[7,'+1 héttel később'],[14,'+2 héttel később']].map(([n, l]) => `<option value="${n}" ${(sh.huDelay || 0) === n ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <div class="small muted" style="margin-top:6px">Streamingnél (pl. Disney+) a magyar időpontot magától számolom; ezt csak akkor állítsd, ha itthon ennél is később jön.</div></div>` : ''}
@@ -1667,6 +1675,7 @@ function renderDetail(){
   $('#dTime').addEventListener('change', saveSched);
   if ($('#dForce')) $('#dForce').addEventListener('change', saveSched);
   bindName(sh);
+  const de = $('#dEnd'); if (de) de.addEventListener('change', () => { sh.endOverride = de.value || undefined; save(); render(); });
   const dl = $('#dDelay'); if (dl) dl.addEventListener('change', () => { sh.huDelay = parseInt(dl.value) || 0; save(); render(); });
   const ah = $('#dAhead'); if (ah) ah.addEventListener('change', () => { sh.ahead = parseInt(ah.value) || 0; save(); render(); });
   const prog = $('#dProg');
@@ -1762,7 +1771,7 @@ async function tmdbResolve(sh){
 }
 const provList = a => (a || []).map(p => ({id: p.provider_id, n: p.provider_name, l: p.logo_path}));
 async function tmdbLoad(sh, force){
-  if (!tmdbKey() || (!force && sh.tmdbInfo && sh.tmdbInfo.v === 2 && now() - sh.tmdbInfo.at < 3 * DAY)) return false;
+  if (!tmdbKey() || (!force && sh.tmdbInfo && sh.tmdbInfo.v === 3 && now() - sh.tmdbInfo.at < 3 * DAY)) return false;
   sh.loading = true;
   try {
     const t = await tmdbResolve(sh);
@@ -1772,7 +1781,7 @@ async function tmdbLoad(sh, force){
     const G = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',99:'Documentary',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Science-Fiction',53:'Thriller',10752:'War',37:'Western'};
     if (isFilm(sh) && sh.id && det.genres) sh.meta = Object.assign({}, sh.meta, {genres: det.genres.map(g => G[g.id]).filter(Boolean)});
     if (isFilm(sh) && sh.id && det.runtime) sh.meta = Object.assign({}, sh.meta, {runtime: det.runtime});
-    sh.tmdbInfo = {at: now(), v: 2, overview: det.overview || '', link: hu.link || '', trailer: pickTrailer(det.videos), cast: pickCast(det.credits),
+    sh.tmdbInfo = {at: now(), v: 3, status: det.status || '', inProd: !!det.in_production, overview: det.overview || '', link: hu.link || '', trailer: pickTrailer(det.videos), cast: pickCast(det.credits),
       flat: provList(hu.flatrate), free: provList([...(hu.free || []), ...(hu.ads || [])]), rent: provList(hu.rent), buy: provList(hu.buy)};
     // magyar sorozatcím, ha van fordítás (és nem írtad át)
     const huName = det.name || det.title, orig = det.original_name || det.original_title;
