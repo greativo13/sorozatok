@@ -273,7 +273,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '41';
+const APP_VER = '42';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1148,8 +1148,8 @@ function renderNezem(){
   };
   list.sort((a, b) => { const ka = key(a), kb = key(b); return ka[0] - kb[0] || ka[1] - kb[1] || a.name.localeCompare(b.name, 'hu'); });
   // csoportok: most nézhető / ma / holnap / ezen a héten / később / nincs dátum
-  const groups = [['now', 'Most nézhető'], ['d0', 'Ma'], ['d1', 'Holnap'], ['wk', 'Ezen a héten'], ['later', 'Később'], ['none', 'Nincs dátum / véget ért']];
-  const bucket = sh => { if (unwatchedAired(sh).length) return 'now'; const x = nextInfo(sh); if (!x) return 'none';
+  const groups = [['now', 'Most nézhető'], ['d0', 'Ma'], ['d1', 'Holnap'], ['wk', 'Ezen a héten'], ['later', 'Később'], ['none', 'Nincs még dátum'], ['ended', 'Véget ért']];
+  const bucket = sh => { if (unwatchedAired(sh).length) return 'now'; const x = nextInfo(sh); if (!x) return isEnded(sh) ? 'ended' : 'none';
     const d = dayDiff(x.d); return d <= 0 ? 'd0' : d === 1 ? 'd1' : d <= 7 ? 'wk' : 'later'; };
   const by = {}; for (const sh of list) (by[bucket(sh)] = by[bucket(sh)] || []).push(sh);
   const body = groups.filter(([k]) => by[k]).map(([k, t]) => csec('n:' + k, t, by[k].length, by[k].map(cardNezem).join(''))).join('');
@@ -1181,7 +1181,11 @@ function cardNezem(sh){
   else if (nx && dayDiff(nx.d) <= 1) l2 = `<span class="tag t-soon">${rel(nx.d)}</span>${esc(nx.label)}`;
   else if (nx) l2 = `<span class="tag t-ok">Naprakész</span>köv.: ${rel(nx.d)} · ${esc(nx.label)}`;
   else if (isEnded(sh)) l2 = '<span class="tag t-gray">Véget ért</span>';
-  else l2 = '<span class="tag t-ok">Naprakész</span>nincs még dátum';
+  else {
+    // ha a legutóbbi évad utolsó részét láttad: évad vége
+    const all = eps(sh), last = all[all.length - 1];
+    l2 = last && !after(last, sh.lastSeason, sh.lastEpisode) ? `<span class="tag t-ok">Évad vége</span>új évad még nincs bejelentve` : '<span class="tag t-ok">Naprakész</span>nincs még dátum';
+  }
   if (!sh.tvmazeId && !nx) l2 = '<span class="tag t-gray">Kézi</span>';
   const pr = seasonProgress(sh);
   let badge = '';
