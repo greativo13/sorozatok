@@ -273,7 +273,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '42';
+const APP_VER = '43';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -1184,7 +1184,9 @@ function cardNezem(sh){
   else {
     // ha a legutóbbi évad utolsó részét láttad: évad vége
     const all = eps(sh), last = all[all.length - 1];
-    l2 = last && !after(last, sh.lastSeason, sh.lastEpisode) ? `<span class="tag t-ok">Évad vége</span>új évad még nincs bejelentve` : '<span class="tag t-ok">Naprakész</span>nincs még dátum';
+    const ahead = last && after({s: sh.lastSeason, n: sh.lastEpisode}, last.s, last.n);  // kézzel előrébb állítva
+    l2 = ahead ? '<span class="tag t-ok">Naprakész</span>előrébb jársz, mint az adatbázis'
+      : last && !after(last, sh.lastSeason, sh.lastEpisode) ? `<span class="tag t-ok">Évad vége</span>új évad még nincs bejelentve` : '<span class="tag t-ok">Naprakész</span>nincs még dátum';
   }
   if (!sh.tvmazeId && !nx) l2 = '<span class="tag t-gray">Kézi</span>';
   const pr = seasonProgress(sh);
@@ -1601,7 +1603,7 @@ function renderDetail(){
   const sh = byId(sheetState.id); if (!sh) { closeSheet(); return; }
   const sheet = $('#sheet');
   const active = document.activeElement && sheet.contains(document.activeElement) ? document.activeElement.id : null;
-  if (active === 'dNotes' || active === 'dLabel' || active === 'dName' || active === 'dTag') return; // ne írjuk felül gépelés közben
+  if (['dNotes', 'dLabel', 'dName', 'dTag', 'mS', 'mE'].includes(active)) return; // ne írjuk felül gépelés közben
   if (isFilm(sh)) return renderFilmDetail(sh);
   const all = eps(sh);
   const nx = nextInfo(sh);
@@ -1620,8 +1622,14 @@ function renderDetail(){
       opts.push(`<option value="${v}" ${v === cur ? 'selected' : ''}>${code(e.s, e.n)}${e.t ? ' – ' + esc(e.t) : ''}${future}</option>`);
     }
     if (lastS) opts.push('</optgroup>');
+    // ha kézzel az adatbázisban még nem szereplő részt állítottál be, azt is mutassuk
+    if (sh.lastSeason && !all.some(e => e.s === sh.lastSeason && e.n === sh.lastEpisode)) opts.push(`<option value="${cur}" selected>${code(sh.lastSeason, sh.lastEpisode)} (kézzel beírva)</option>`);
     progress = `<select id="dProg">${opts.join('')}</select>
-      <div class="row" style="margin-top:8px"><button class="btn" data-act="caughtUp" data-id="${sh.id}" ${ua.length ? '' : 'disabled'}>Mindent láttam, ami kijött</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn" data-act="caughtUp" data-id="${sh.id}" ${ua.length ? '' : 'disabled'}>Mindent láttam, ami kijött</button></div>
+      <div class="small muted" style="margin-top:10px">Nincs még fent a legújabb rész? Írd be kézzel:</div>
+      <div class="row" style="margin-top:6px;align-items:flex-end"><div><label>Évad</label><input type="number" id="mS" min="1" inputmode="numeric" value="${sh.lastSeason || 1}"></div>
+        <div><label>Rész</label><input type="number" id="mE" min="0" inputmode="numeric" value="${sh.lastEpisode || 0}"></div>
+        <button class="btn primary" data-act="manualPos" data-id="${sh.id}" style="flex:0 0 auto;padding:11px 14px">Mentés</button></div>`;
   } else {
     progress = `<div class="row"><div><label>Évad</label><input type="number" id="dS" min="0" inputmode="numeric" value="${sh.lastSeason}"></div>
       <div><label>Rész</label><input type="number" id="dE" min="0" inputmode="numeric" value="${sh.lastEpisode}"></div></div>`;
@@ -2486,6 +2494,8 @@ document.addEventListener('click', e => {
     case 'staleDrop': sh.status = 'abbahagytam'; save(); render(); toast(`${sh.name} → Abbahagytam`); break;
     case 'secToggle': { const k = el.dataset.k; if (collapsed[k]) delete collapsed[k]; else collapsed[k] = 1; lsSet('nezonaplo.collapsed', JSON.stringify(collapsed)); render(); break; }
     case 'badgeOn': Notification.requestPermission().then(() => { updateBadge(); renderNotifs(); }).catch(() => {}); break;
+    case 'manualPos': { const s2 = Math.max(1, parseInt($('#mS').value) || 1), n2 = Math.max(0, parseInt($('#mE').value) || 0);
+      setProgress(sh, s2, n2, 'ask'); delete sh.needPos; save(); render(); toast(`Elmentve: ${code(s2, n2)}`); break; }
     case 'rate': { const v = +el.dataset.v; sh.rating = sh.rating === v ? 0 : v; save(); render(); break; }
     case 'ics': e.stopPropagation(); icsFor(el.dataset.key); break;
     case 'refresh': refreshAll(true); break;
