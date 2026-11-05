@@ -241,6 +241,11 @@ main{overflow-x:clip}
 .csec-h.sub{font-size:12px;padding:8px 4px 6px 12px;color:var(--text);text-transform:none;letter-spacing:0;font-size:14px}
 .hdot{position:absolute;top:-3px;right:-3px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px var(--bg)}
 .card.unread{box-shadow:inset 3px 0 0 var(--accent)}
+.yt-row{align-items:flex-start}
+.yt-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ytb{background:var(--surface2);border-radius:9px;padding:6px 10px;font-size:13px;font-weight:600;white-space:nowrap}
+.ytb.pri{background:var(--accent);color:#fff}
+.ytb.ok{color:var(--ok)}
 .cover-btn{position:relative;flex:none}
 .row input{min-width:0}
 .cover-btn .cam{position:absolute;right:-6px;bottom:-6px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
@@ -273,7 +278,7 @@ main{overflow-x:clip}
 
 <script>
 'use strict';
-const APP_VER = '43';
+const APP_VER = '44';
 const KEY = 'sorozatmemoria.v1';
 const API = 'https://api.tvmaze.com';
 const DAY = 864e5;
@@ -783,7 +788,7 @@ const secTxt = n => n >= 3600 ? `${Math.floor(n / 3600)}:${pad(Math.floor(n / 60
 // Shorts: legfeljebb 3 perces videók (a YouTube nem jelzi külön, a hossz alapján szűrünk)
 const isShort = v => { const d = (yt.durs || {})[v.id]; return d > 0 && d <= 180; };
 const ytVisible = () => yt.videos.filter(v => !yt.hidden[v.ch] && !yt.nope[v.id] && !(yt.shortsHide !== false && isShort(v)));
-const ytNewCount = () => ytVisible().filter(v => !yt.seen[v.id]).length;
+const ytNewCount = () => ytVisible().filter(v => !yt.seen[v.id] && !yt.later[v.id]).length;
 function ytAgo(t){
   const m = Math.round((now() - t) / 60e3);
   if (m < 60) return `${Math.max(1, m)} perce`; if (m < 24 * 60) return `${Math.round(m / 60)} órája`;
@@ -848,17 +853,22 @@ function renderYoutube(){
     <button class="btn block" data-act="ytClientReset">Client ID módosítása</button>`;
   const chName = Object.fromEntries(yt.channels.map(c => [c.id, c.title]));
   const list = ytVisible().filter(v => !ytChan || v.ch === ytChan);
-  const fresh = list.filter(v => !yt.seen[v.id]), old = list.filter(v => yt.seen[v.id] && !yt.later[v.id]).slice(0, 80);
-  const row = v => `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${esc(v.id)}" ${yt.nope[v.id] ? '' :
-    yt.later[v.id] ? 'data-swipe-l="ytLater" data-sl="Levesz"' : !yt.seen[v.id] ? 'data-swipe-l="ytNope" data-sl="Nem érdekel" data-swipe-r="ytWant" data-sr="Érdekel"' : 'data-swipe-l="ytNope" data-sl="Elrejt"'}>
+  const fresh = list.filter(v => !yt.seen[v.id] && !yt.later[v.id]), old = list.filter(v => yt.seen[v.id] && !yt.later[v.id]).slice(0, 80);
+  // sor: kép + cím/adatok, alatta a gombok (Láttam / Nem láttam kívül, adatlap nélkül is)
+  const row = v => {
+    const id = esc(v.id), lt = yt.later[v.id], watched = lt ? !!lt.watched : !!yt.seen[v.id];
+    const b = (act, txt, cls) => `<button class="ytb ${cls || ''}" data-act="${act}" data-vid="${id}">${txt}</button>`;
+    const seenBtn = b('ytSeenToggle', watched ? '↺ Nem láttam' : '✓ Láttam', watched ? '' : 'ok');
+    const acts = yt.nope[v.id] ? b('ytNope', 'Visszahoz')
+      : lt ? seenBtn + b('ytLater', '✕ Levesz')
+      : !yt.seen[v.id] ? b('ytWant', 'Érdekel', 'pri') + seenBtn + b('ytNope', 'Nem érdekel')
+      : seenBtn + b('ytNope', 'Elrejt');
+    return `<div class="yt-row${yt.seen[v.id] ? '' : ' new'}" data-act="ytDetail" data-vid="${id}" ${yt.nope[v.id] ? '' :
+      lt ? 'data-swipe-l="ytLater" data-sl="Levesz"' : !yt.seen[v.id] ? 'data-swipe-l="ytNope" data-sl="Nem érdekel" data-swipe-r="ytWant" data-sr="Érdekel"' : 'data-swipe-l="ytNope" data-sl="Elrejt"'}>
       ${v.thumb ? `<img src="${esc(v.thumb)}" alt="" loading="lazy">` : '<div class="yt-ph"></div>'}
-      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${(yt.durs || {})[v.id] ? ' · ' + secTxt(yt.durs[v.id]) : ''}${yt.later[v.id] && yt.seen[v.id] && v.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div></div>
-      ${yt.nope[v.id] ? `<button class="btn" data-act="ytNope" data-vid="${esc(v.id)}">Visszahoz</button>` :
-        !yt.seen[v.id] && !yt.later[v.id] ? `<div style="display:flex;flex-direction:column;gap:6px;flex:none">
-          <button class="btn primary" data-act="ytWant" data-vid="${esc(v.id)}">Érdekel</button>
-          <button class="btn" data-act="ytNope" data-vid="${esc(v.id)}">Nem érdekel</button></div>` :
-        yt.later[v.id] ? `<button class="yt-x" data-act="ytLater" data-vid="${esc(v.id)}" aria-label="Levesz a listáról">✕</button>` :
-        `<button class="yt-x" data-act="ytNope" data-vid="${esc(v.id)}" aria-label="Nem érdekel">✕</button>`}</div>`;
+      <div class="yt-body"><div class="yt-title">${esc(v.title)}</div><div class="small muted">${esc(chName[v.ch] || v.chTitle || '')} · ${ytAgo(v.pub)}${(yt.durs || {})[v.id] ? ' · ' + secTxt(yt.durs[v.id]) : ''}${lt && lt.watched ? ' · <span style="color:var(--ok)">✓ megnézve</span>' : ''}</div>
+        <div class="yt-acts">${acts}</div></div></div>`;
+  };
   const nopeList = yt.videos.filter(v => yt.nope[v.id] && !yt.hidden[v.ch] && (!ytChan || v.ch === ytChan));
   const later = Object.values(yt.later || {}).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)).filter(v => !ytChan || v.ch === ytChan);
   const opts = yt.channels.filter(c => !yt.hidden[c.id]).map(c => `<option value="${esc(c.id)}" ${c.id === ytChan ? 'selected' : ''}>${esc(c.title)}</option>`).join('');
